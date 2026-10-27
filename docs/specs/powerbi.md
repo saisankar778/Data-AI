@@ -59,6 +59,13 @@ Categories: Performance, DAX, Error prevention, Maintenance, Formatting, Naming,
 - Anything that deletes, renames or needs judgement stays manual. Every rule has a "how to fix" note in the CLI, the UI and MCP.
 - Invariant (tested): applying all fixes to `retail-issues` removes exactly the fixed findings and introduces none.
 
+## Semantic diff (`datawright diff`)
+
+- Compares two Git revisions of a PBIP project (or a revision against the working tree) in model terms: tables, columns, measures and relationships added, removed or changed (field by field), plus the health-score delta and findings resolved or introduced.
+- **Broken references:** the `unknown-reference` rule (error) flags DAX that points at a missing column or measure. It skips names an expression creates itself (ADDCOLUMNS aliases, `[Value]`/`[Date]` from GENERATESERIES or CALENDAR) and `X[...]` where X isn't a model table (variables). It had zero false positives on the three Microsoft samples.
+- `--out` writes Markdown for a pull-request comment; `--fail-on-break` exits 1 for CI.
+- The change-set page shows the same preview ("What this changes") before approval, and the base-to-commit diff after apply.
+
 ## Ask (`ask-model`)
 
 - Read-only tools: `search_model`, `get_object`, `list_relationships`.

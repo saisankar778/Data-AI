@@ -7,7 +7,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import typer
 from sqlalchemy import select
@@ -66,7 +66,7 @@ def make_client(settings: Settings, offline: bool, script: Any) -> tuple[Message
     return anthropic.Anthropic(), settings.model
 
 
-def _fail(message: str) -> None:
+def _fail(message: str) -> NoReturn:
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(1)
 
@@ -190,6 +190,38 @@ def audit(connection: str) -> None:
         for f in findings:
             typer.echo(f"  {f.severity:8} {f.rule:34} {f.object_path}")
         typer.echo(f"{len(findings)} findings.")
+
+
+@app.command()
+def diff(
+    path: Path,
+    base: str = typer.Option("HEAD", help="Git revision to compare from."),
+    head: str = typer.Option("", help="Git revision to compare to (default: working tree)."),
+    out: Path = typer.Option(None, help="Write Markdown to this file (e.g. a PR comment)."),
+    fail_on_break: bool = typer.Option(
+        False, "--fail-on-break", help="Exit 1 if the change breaks DAX references."
+    ),
+) -> None:
+    """Explain what changed in a PBIP project between two Git versions, in model terms:
+    objects added, removed or changed, references it breaks, and the health-score delta."""
+    from datawright.connectors.powerbi.diff import diff_revisions, render_markdown
+    from datawright.core import gitops
+
+    repo = gitops.project_root(path.resolve())
+    if repo is None:
+        _fail(f"{path} is not in its own Git repository (run `datawright track` first)")
+    try:
+        diffs = diff_revisions(repo, base or None, head or None)
+    except gitops.GitError as e:
+        _fail(str(e))
+    text = render_markdown(diffs, f"Model changes: {base} -> {head or 'working tree'}")
+    if out:
+        out.write_text(text, encoding="utf-8")
+        typer.echo(f"Wrote {out}")
+    else:
+        typer.echo(text)
+    if fail_on_break and any(d.broken_references for d in diffs):
+        raise typer.Exit(1)
 
 
 @app.command()

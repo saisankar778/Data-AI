@@ -15,6 +15,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from datawright.config import HOST, Settings
+from datawright.connectors.powerbi.diff import (
+    ModelDiff,
+    diff_models,
+    diff_revisions,
+    models_at,
+    models_with_edits,
+)
 from datawright.connectors.powerbi.fixes import AUTO_FIXABLE, guidance
 from datawright.connectors.powerbi.health import health
 from datawright.connectors.powerbi.pbip import open_source
@@ -25,6 +32,21 @@ from datawright.models import AgentRun, ChangeSet, Connection, Finding
 from datawright.services import bootstrap, connector_for
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def change_set_preview(cs: ChangeSet) -> list[ModelDiff] | None:
+    """What the change set does to the model, in model terms (None if it can't be computed)."""
+    if cs.connection.kind != "pbip_repo":
+        return None
+    repo = Path(cs.connection.path)
+    try:
+        if cs.status in ("applied", "rolled_back") and cs.base_sha and cs.commit_sha:
+            return diff_revisions(repo, cs.base_sha, cs.commit_sha)
+        old = models_at(repo, None)
+        new = models_with_edits(repo, {i.file_path: i.after for i in cs.items})
+        return [diff_models(old.get(n), new.get(n)) for n in sorted(set(old) | set(new))]
+    except Exception:  # a preview must never stop someone reviewing the diff itself
+        return None
 
 
 def _db(request: Request) -> Iterator[Session]:
@@ -178,7 +200,10 @@ def create_app(
         findings = session.scalars(
             select(Finding).where(Finding.change_item_id.in_([i.id for i in cs.items]))
         ).all()
-        return render(request, "change_set.html", cs=cs, findings=findings, error=error)
+        return render(
+            request, "change_set.html", cs=cs, findings=findings, error=error,
+            preview=change_set_preview(cs),
+        )  # fmt: skip
 
     @app.get("/findings", response_class=HTMLResponse)
     def findings(request: Request, session: DB) -> HTMLResponse:

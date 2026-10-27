@@ -50,6 +50,8 @@ GUIDANCE: dict[str, str] = {
     "USERELATIONSHIP().",
     "data-column-needs-source": "Set the column's source column, or remove the column.",
     "expression-required": "Give the object an expression, or delete it.",
+    "unknown-reference": "Point the reference at the renamed or replacement column or measure, or "
+    "restore the missing one. `datawright diff` shows which change removed it.",
     "relationship-same-data-type": "Change one key column's type in Power Query so both sides "
     "match (ideally whole numbers).",
     "invalid-name-characters": "Rename the object without control characters.",

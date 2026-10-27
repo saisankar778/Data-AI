@@ -215,3 +215,7 @@ cases:
     fixture: retail-issues
     rule: generic-column-name
     objects: []
+  - id: no-false-unknown-reference
+    fixture: retail-issues
+    rule: unknown-reference
+    objects: []

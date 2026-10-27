@@ -58,6 +58,28 @@
 </table>
 {% endif %}
 
+{% if preview %}
+<h2>What this changes</h2>
+{% for d in preview %}
+<div class="cards">
+  <div class="card"><div class="big">{{ d.old_health.score if d.old_health else '–' }} → {{ d.new_health.score if d.new_health else '–' }}</div>
+    <div class="muted">health score of {{ d.model }} ({{ '+' if d.score_delta > 0 else '' }}{{ d.score_delta }})</div></div>
+  <div class="card"><div class="big">{{ d.resolved_findings | length }}</div><div class="muted">findings resolved</div></div>
+  <div class="card"><div class="big">{{ d.new_findings | length }}</div><div class="muted">new findings</div></div>
+</div>
+{% if d.broken_references %}<div class="error"><b>This breaks references:</b>
+  {% for f in d.broken_references %}<br>{{ f.message }}{% endfor %}</div>{% endif %}
+{% for f in d.new_findings if f.rule != 'unknown-reference' %}<p class="muted">New {{ f.severity }}: {{ f.message }}</p>{% endfor %}
+<table>
+  <tr><th>Change</th><th>Object</th><th>Details</th></tr>
+  {% for c in d.changes[:60] %}
+  <tr><td>{{ c.change }} {{ c.kind }}</td><td><code>{{ c.object_path }}</code></td>
+    <td>{% for name, old, new in c.fields %}{{ name }}: <s class="muted">{{ old if old is not none else '(none)' }}</s> → {{ new if new is not none else '(none)' }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>
+  {% endfor %}
+</table>
+{% endfor %}
+{% endif %}
+
 {% for item in cs.items %}
 <h2><code>{{ item.file_path }}</code></h2>
 <pre class="diff">{% for line in item.diff.splitlines() %}<span class="{{ 'add' if line.startswith('+') and not line.startswith('+++') else 'del' if line.startswith('-') and not line.startswith('---') else 'hunk' if line.startswith('@@') else '' }}">{{ line }}</span>{% endfor %}</pre>

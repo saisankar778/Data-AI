@@ -567,6 +567,44 @@ def _invalid_chars(model: SemanticModel, ix: ModelIndex) -> Iterable[tuple[str, 
                 yield _mpath(model, t, m.name), f"Measure name {m.name!r} has control characters."
 
 
+_GENERATED_COLUMN = re.compile(r"value\d*|date", re.I)  # GENERATESERIES, {…} tables, CALENDAR
+
+
+@rule(
+    "unknown-reference",
+    "DAX must only reference columns and measures that exist",
+    "Error prevention",
+    "error",
+    "A reference to a missing column or measure breaks the measure and every visual using it. "
+    "This usually happens after a rename or a removed column.",
+)
+def _unknown_reference(model: SemanticModel, ix: ModelIndex) -> Iterable[tuple[str, str]]:
+    tables = {t.name.casefold() for t in model.tables.values()}
+    owners: list[tuple[str, str, str]] = [
+        (_mpath(model, t, m.name), f"Measure [{m.name}]", m.expression)
+        for t, m in model.all_measures()
+    ]
+    owners += [
+        (_cpath(model, t, c), f"Calculated column {t.name}[{c.name}]", c.expression or "")
+        for t, c in model.all_columns()
+        if c.kind == "calculated"
+    ]
+    for path, label, expr in owners:
+        aliases = {s.casefold() for s in re.findall(r'"([^"]+)"', expr)}  # ADDCOLUMNS etc.
+        missing = set()
+        for ref in references(expr):
+            name = ref.name.casefold()
+            if ref.table is None:
+                known = name in ix.measures or name in ix.column_names or name in aliases
+                if not known and not _GENERATED_COLUMN.fullmatch(name):
+                    missing.add(f"[{ref.name}]")
+            elif ref.table.casefold() in tables:  # other "tables" may be variables
+                if (ref.table.casefold(), name) not in ix.columns and name not in ix.measures:
+                    missing.add(f"{ref.table}[{ref.name}]")
+        if missing:
+            yield path, f"{label} references {', '.join(sorted(missing))}, which doesn't exist."
+
+
 # ---------------------------------------------------------------- Maintenance
 
 
