@@ -453,17 +453,96 @@ def build(clean: bool) -> dict[str, str]:
     return files
 
 
+SCHEMA = "https://developer.microsoft.com/json-schemas/fabric/item/report/definition"
+
+# (page, visual id, visual type, [(role, "Column"|"Measure", table, field), ...])
+# Uses every visible field of retail-clean except measure [Order Lines] and Customer[Segment].
+REPORT_VISUALS = [
+    ("overview", "kpis", "multiRowCard", [
+        ("Values", "Measure", "Sales", m) for m in (
+            "Total Sales", "Margin %", "Sales YoY %", "Avg Order Value", "Units",
+            "Sales by Ship Date")
+    ] + [("Values", "Measure", "Product", "Product Count"),
+         ("Values", "Measure", "Customer", "Customer Count")]),
+    ("overview", "bycategory", "clusteredBarChart", [
+        ("Category", "Column", "Product", "Category"), ("Y", "Measure", "Sales", "Total Sales")]),
+    ("overview", "trend", "lineChart", [
+        ("Category", "Column", "Calendar", "Month"), ("Y", "Measure", "Sales", "Total Sales")]),
+    ("overview", "year", "slicer", [("Values", "Column", "Calendar", "Year")]),
+    ("details", "products", "tableEx", [
+        ("Values", "Column", "Product", "Product Name"),
+        ("Values", "Column", "Product", "ListPrice"),
+        ("Values", "Column", "Sales", "UnitPrice"),
+        ("Values", "Column", "Customer", "Customer Name")]),
+    ("details", "cities", "map", [
+        ("Category", "Column", "Customer", "City"), ("Size", "Measure", "Sales", "Total Sales")]),
+]  # fmt: skip
+
+
+def report_files() -> dict[str, str]:
+    """A PBIR report (Retail.Report) over the retail model."""
+
+    def dump(data: object) -> str:
+        return json.dumps(data, indent=2) + "\n"
+
+    pages = {"overview": "Overview", "details": "Details"}
+    files = {
+        "Retail.Report/definition.pbir": dump(
+            {"version": "4.0", "datasetReference": {"byPath": {"path": "../Retail.SemanticModel"}}}
+        ),
+        "Retail.Report/definition/version.json": dump(
+            {"$schema": f"{SCHEMA}/versionMetadata/1.0.0/schema.json", "version": "2.0.0"}
+        ),
+        "Retail.Report/definition/report.json": dump(
+            {"$schema": f"{SCHEMA}/report/1.0.0/schema.json"}
+        ),
+        "Retail.Report/definition/pages/pages.json": dump(
+            {
+                "$schema": f"{SCHEMA}/pagesMetadata/1.0.0/schema.json",
+                "pageOrder": list(pages),
+                "activePageName": "overview",
+            }
+        ),  # fmt: skip
+    }
+    for page, title in pages.items():
+        files[f"Retail.Report/definition/pages/{page}/page.json"] = dump({
+            "$schema": f"{SCHEMA}/page/1.0.0/schema.json", "name": page, "displayName": title,
+            "displayOption": "FitToPage", "height": 720, "width": 1280,
+        })  # fmt: skip
+    for i, (page, vid, vtype, fields) in enumerate(REPORT_VISUALS):
+        state: dict[str, dict[str, list[object]]] = {}
+        for role, kind, table, prop in fields:
+            state.setdefault(role, {"projections": []})["projections"].append({
+                "field": {kind: {"Expression": {"SourceRef": {"Entity": table}}, "Property": prop}},
+                "queryRef": f"{table}.{prop}", "nativeQueryRef": prop,
+            })  # fmt: skip
+        files[f"Retail.Report/definition/pages/{page}/visuals/{vid}/visual.json"] = dump({
+            "$schema": f"{SCHEMA}/visualContainer/1.0.0/schema.json", "name": vid,
+            "position": {"x": 40 + 320 * (i % 3), "y": 40 + 240 * (i // 3), "z": i,
+                         "width": 300, "height": 220},
+            "visual": {"visualType": vtype, "query": {"queryState": state}},
+        })  # fmt: skip
+    return files
+
+
 def main() -> None:
-    for variant, clean in (("retail-clean", True), ("retail-issues", False)):
+    variants = (("retail-clean", True, False), ("retail-issues", False, False),
+                ("retail-report", True, True))  # fmt: skip
+    for variant, clean, with_report in variants:
+        if (ROOT / variant).exists():
+            shutil.rmtree(ROOT / variant)
         model_dir = ROOT / variant / "Retail.SemanticModel"
-        if model_dir.exists():
-            shutil.rmtree(model_dir)
         (model_dir / "definition" / "tables").mkdir(parents=True)
         (model_dir / "definition.pbism").write_text(
             json.dumps({"version": "4.0", "settings": {}}, indent=2) + "\n", newline="\n"
         )
         for rel, text in build(clean).items():
             (model_dir / rel).write_text(text, encoding="utf-8", newline="\n")
+        if with_report:
+            for rel, text in report_files().items():
+                target = ROOT / variant / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(text, encoding="utf-8", newline="\n")
     print(f"fixtures written to {ROOT}")
 
 

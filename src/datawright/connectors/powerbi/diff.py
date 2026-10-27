@@ -13,11 +13,10 @@ from typing import Any
 
 from datawright.connectors.powerbi.health import HealthReport, health
 from datawright.connectors.powerbi.model import Relationship, SemanticModel
-from datawright.connectors.powerbi.pbip import SUFFIX, find_models
+from datawright.connectors.powerbi.pbip import SUFFIX, PbipRepoConnector
 from datawright.connectors.powerbi.rules import RuleFinding
-from datawright.connectors.powerbi.tmdl import load_model
 from datawright.core import gitops
-from datawright.core.paths import make_path
+from datawright.core.paths import make_path, split_path
 
 COLUMN_FIELDS = ("data_type", "description", "is_hidden", "is_key", "summarize_by",
                  "sort_by_column", "data_category", "format_string", "expression",
@@ -43,6 +42,7 @@ class ModelDiff:
     new_health: HealthReport | None = None
     new_findings: list[RuleFinding] = field(default_factory=list)
     resolved_findings: list[RuleFinding] = field(default_factory=list)
+    broken_visuals: list[str] = field(default_factory=list)  # removed fields visuals still use
 
     @property
     def broken_references(self) -> list[RuleFinding]:
@@ -99,6 +99,21 @@ def diff_models(old: SemanticModel | None, new: SemanticModel | None) -> ModelDi
             d.changes.append(Change("relationship", path, "added" if orel is None else "removed"))
         elif f := _fields(orel, nrel, REL_FIELDS):
             d.changes.append(Change("relationship", path, "changed", f))
+    usage = old.report_usage if old else None
+    if usage is not None:
+        for c in d.changes:
+            if c.change != "removed" or c.kind not in ("table", "column", "measure"):
+                continue
+            parts = split_path(c.object_path)
+            if c.kind == "table":
+                keys = [k for k in usage.uses if k[0] == parts[1].casefold()]
+            else:
+                keys = [(parts[1].casefold(), parts[3].casefold())]
+            places = sorted({p for k in keys for p in usage.uses.get(k, [])})
+            if places:
+                shown = "; ".join(places[:5]) + (f" (+{len(places) - 5} more)" if len(places) > 5
+                                                 else "")  # fmt: skip
+                d.broken_visuals.append(f"{c.kind} {c.object_path} is used by {shown}")
     d.old_health = health(old) if old else None
     d.new_health = health(new) if new else None
     old_set = {(f.rule, f.object_path) for f in (d.old_health.findings if d.old_health else [])}
@@ -110,38 +125,43 @@ def diff_models(old: SemanticModel | None, new: SemanticModel | None) -> ModelDi
     return d
 
 
+def _is_model_file(path: str) -> bool:
+    if f"{SUFFIX}/definition/" in path and path.endswith(".tmdl"):
+        return True
+    return ".Report/" in path and path.endswith((".json", ".pbir"))
+
+
 def models_at(repo: Path, rev: str | None) -> dict[str, SemanticModel]:
-    """All models in `repo` at Git revision `rev` (None = the working tree)."""
+    """All models (with their reports' field usage) in `repo` at Git revision `rev`
+    (None = the working tree)."""
     if rev is None:
-        return {name: load_model(name, d) for name, d in find_models(repo)}
-    files = [
-        f for f in gitops.out(repo, "ls-tree", "-r", "--name-only", rev).splitlines()
-        if f"{SUFFIX}/definition/" in f and f.endswith(".tmdl")
-    ]  # fmt: skip
+        return PbipRepoConnector(repo).models()
+    files = [f for f in gitops.out(repo, "ls-tree", "-r", "--name-only", rev).splitlines()
+             if _is_model_file(f)]  # fmt: skip
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         for f in files:
             target = root / f
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(gitops.show(repo, rev, f))
-        return {name: load_model(name, d) for name, d in find_models(root)}
+        return PbipRepoConnector(root).models()
 
 
 def models_with_edits(repo: Path, edits: dict[str, str]) -> dict[str, SemanticModel]:
     """The working-tree models with some files replaced (to preview a change set)."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        for _, definition in find_models(repo):
-            rel = definition.relative_to(repo)
-            for src in definition.rglob("*.tmdl"):
-                target = root / rel / src.relative_to(definition)
+        for src in repo.rglob("*"):
+            rel = src.relative_to(repo).as_posix()
+            if src.is_file() and ".git/" not in rel and _is_model_file(rel):
+                target = root / rel
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(src.read_bytes())
         for rel_path, text in edits.items():
             target = root / rel_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(text.encode("utf-8"))
-        return {name: load_model(name, d) for name, d in find_models(root)}
+        return PbipRepoConnector(root).models()
 
 
 def diff_revisions(repo: Path, base: str | None, head: str | None) -> list[ModelDiff]:
@@ -162,6 +182,10 @@ def render_markdown(diffs: list[ModelDiff], title: str = "Model changes") -> str
         sign = "+" if d.score_delta > 0 else ""
         lines.append(f"### {d.model}: health {old} -> {new} ({sign}{d.score_delta})")
         lines.append("")
+        if d.broken_visuals:
+            lines.append(f"**Breaks {len(d.broken_visuals)} report field(s):**")
+            lines += [f"- {b}" for b in d.broken_visuals]
+            lines.append("")
         if d.broken_references:
             lines.append(f"**Breaks {len(d.broken_references)} reference(s):**")
             lines += [f"- {f.message}" for f in d.broken_references]

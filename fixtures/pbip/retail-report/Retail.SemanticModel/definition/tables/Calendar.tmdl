@@ -1,0 +1,50 @@
+/// One row per day for time intelligence.
+table Calendar
+	dataCategory: Time
+	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000024
+
+	/// Calendar date.
+	column Date
+		dataType: dateTime
+		isKey
+		formatString: Long Date
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001d
+		summarizeBy: none
+		sourceColumn: [Date]
+
+	/// Calendar year.
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001e
+		summarizeBy: none
+		sourceColumn: [Year]
+
+	/// Month name, sorted by month number.
+	column Month
+		dataType: string
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001f
+		summarizeBy: none
+		sourceColumn: [Month]
+		sortByColumn: MonthNumber
+
+	column MonthNumber
+		dataType: int64
+		formatString: 0
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000020
+		summarizeBy: none
+		sourceColumn: [MonthNumber]
+
+	partition Calendar = calculated
+		mode: import
+		source = ```
+				ADDCOLUMNS(
+					CALENDAR(DATE(2024, 1, 1), DATE(2026, 12, 31)),
+					"Year", YEAR([Date]),
+					"Month", FORMAT([Date], "MMM"),
+					"MonthNumber", MONTH([Date])
+				)
+				```
+
+	annotation PBI_ResultType = Table

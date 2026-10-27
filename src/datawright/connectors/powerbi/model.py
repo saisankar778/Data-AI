@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from datawright.connectors.powerbi.report import ReportUsage
+
 AUTO_DATE_PREFIXES = ("LocalDateTable_", "DateTableTemplate_")
 
 
@@ -111,6 +113,7 @@ class SemanticModel:
     annotations: dict[str, str] = field(default_factory=dict)
     expressions: dict[str, str] = field(default_factory=dict)  # shared M queries and parameters
     definition_dir: Path | None = None
+    report_usage: ReportUsage | None = None  # None: no report to check against
 
     def all_measures(self) -> list[tuple[Table, Measure]]:
         return [(t, m) for t in self.tables.values() for m in t.measures]

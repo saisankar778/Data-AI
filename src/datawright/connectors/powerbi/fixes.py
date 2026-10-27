@@ -58,6 +58,9 @@ GUIDANCE: dict[str, str] = {
     "unnecessary-hidden-columns": "Remove the column in Power Query (Choose columns), after "
     "checking no report visual or RLS role uses it.",
     "unnecessary-hidden-measures": "Delete the measure after checking no report uses it.",
+    "unused-measure": "Delete it, or hide it if other reports on the model might use it.",
+    "unused-column": "Remove it in Power Query (Choose columns) if no other report needs it, or "
+    "hide it; removing unused columns makes the model smaller and refresh faster.",
     "table-without-relationships": "Relate the table to the model, or delete it if it isn't used.",
     "measure-missing-description": "Run `datawright document` (Claude drafts them for review).",
     "object-missing-description": "Run `datawright document` (Claude drafts them for review).",

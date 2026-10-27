@@ -1,0 +1,4 @@
+expression DataFolder = "C:\Data\" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000025
+
+	annotation PBIResultType = Text

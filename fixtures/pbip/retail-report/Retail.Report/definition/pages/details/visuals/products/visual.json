@@ -1,0 +1,78 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/1.0.0/schema.json",
+  "name": "products",
+  "position": {
+    "x": 360,
+    "y": 280,
+    "z": 4,
+    "width": 300,
+    "height": 220
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Product"
+                    }
+                  },
+                  "Property": "Product Name"
+                }
+              },
+              "queryRef": "Product.Product Name",
+              "nativeQueryRef": "Product Name"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Product"
+                    }
+                  },
+                  "Property": "ListPrice"
+                }
+              },
+              "queryRef": "Product.ListPrice",
+              "nativeQueryRef": "ListPrice"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Sales"
+                    }
+                  },
+                  "Property": "UnitPrice"
+                }
+              },
+              "queryRef": "Sales.UnitPrice",
+              "nativeQueryRef": "UnitPrice"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Customer"
+                    }
+                  },
+                  "Property": "Customer Name"
+                }
+              },
+              "queryRef": "Customer.Customer Name",
+              "nativeQueryRef": "Customer Name"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

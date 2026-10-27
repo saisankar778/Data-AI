@@ -1,0 +1,52 @@
+/// Customers who placed orders.
+table Customer
+	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000023
+
+	/// Number of distinct customers.
+	measure 'Customer Count' = DISTINCTCOUNT(Customer[CustomerKey])
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000018
+
+	/// Customer identifier.
+	column CustomerKey
+		dataType: int64
+		isKey
+		formatString: 0
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000019
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	/// Customer name.
+	column 'Customer Name'
+		dataType: string
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001a
+		summarizeBy: none
+		sourceColumn: Customer Name
+
+	/// City of the customer's billing address.
+	column City
+		dataType: string
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001b
+		dataCategory: City
+		summarizeBy: none
+		sourceColumn: City
+
+	/// Customer segment.
+	column Segment
+		dataType: string
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001c
+		summarizeBy: none
+		sourceColumn: Segment
+
+	partition Customer = m
+		mode: import
+		source =
+				let
+					Source = Csv.Document(File.Contents(DataFolder & "customer.csv"), [Delimiter=",", Columns=4, Encoding=65001]),
+					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+					Typed = Table.TransformColumnTypes(Promoted, {{"CustomerKey", Int64.Type}, {"Customer Name", type text}, {"City", type text}, {"Segment", type text}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

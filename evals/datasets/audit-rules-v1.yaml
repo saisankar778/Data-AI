@@ -219,3 +219,17 @@ cases:
     fixture: retail-issues
     rule: unknown-reference
     objects: []
+  - id: unused-measure
+    fixture: retail-report
+    rule: unused-measure
+    objects:
+      - "Retail/Sales/measure/Order Lines"
+  - id: unused-column
+    fixture: retail-report
+    rule: unused-column
+    objects:
+      - "Retail/Customer/column/Segment"
+  - id: no-unused-findings-without-a-report
+    fixture: retail-issues
+    rule: unused-measure
+    objects: []

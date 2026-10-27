@@ -11,6 +11,7 @@ from typing import ClassVar
 
 from datawright.connectors.base import AssetRecord
 from datawright.connectors.powerbi.model import Column, Measure, SemanticModel, Table
+from datawright.connectors.powerbi.report import pbip_report_usage, pbix_report_usage
 from datawright.connectors.powerbi.tmdl import load_model
 from datawright.core import gitops
 from datawright.core.capabilities import Capability
@@ -197,6 +198,8 @@ class PbipRepoConnector(_PowerBIConnector):
     def models(self) -> dict[str, SemanticModel]:
         if self._models is None:
             self._models = {name: load_model(name, d) for name, d in find_models(self.root)}
+            for name, usage in pbip_report_usage(self.root, list(self._models)).items():
+                self._models[name].report_usage = usage
         return self._models
 
 
@@ -221,6 +224,7 @@ class PbixFileConnector(_PowerBIConnector):
             from datawright.connectors.powerbi.pbix import load_pbix_model
 
             model = load_pbix_model(self.root)
+            model.report_usage = pbix_report_usage(self.root)
             self._models = {model.name: model}
         return self._models
 

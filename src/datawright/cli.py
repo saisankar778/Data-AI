@@ -302,7 +302,7 @@ def diff(
         typer.echo(f"Wrote {out}")
     else:
         typer.echo(text)
-    if fail_on_break and any(d.broken_references for d in diffs):
+    if fail_on_break and any(d.broken_references or d.broken_visuals for d in diffs):
         raise typer.Exit(1)
 
 

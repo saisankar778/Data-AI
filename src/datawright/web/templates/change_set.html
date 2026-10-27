@@ -67,6 +67,8 @@
   <div class="card"><div class="big">{{ d.resolved_findings | length }}</div><div class="muted">findings resolved</div></div>
   <div class="card"><div class="big">{{ d.new_findings | length }}</div><div class="muted">new findings</div></div>
 </div>
+{% if d.broken_visuals %}<div class="error"><b>This breaks report visuals:</b>
+  {% for b in d.broken_visuals %}<br>{{ b }}{% endfor %}</div>{% endif %}
 {% if d.broken_references %}<div class="error"><b>This breaks references:</b>
   {% for f in d.broken_references %}<br>{{ f.message }}{% endfor %}</div>{% endif %}
 {% for f in d.new_findings if f.rule != 'unknown-reference' %}<p class="muted">New {{ f.severity }}: {{ f.message }}</p>{% endfor %}

@@ -59,6 +59,14 @@ Categories: Performance, DAX, Error prevention, Maintenance, Formatting, Naming,
 - Anything that deletes, renames or needs judgement stays manual. Every rule has a "how to fix" note in the CLI, the UI and MCP.
 - Invariant (tested): applying all fixes to `retail-issues` removes exactly the fixed findings and introduces none.
 
+## Report usage
+
+- `connectors/powerbi/report.py` reads which fields visuals, page filters and report filters use: PBIR folders in PBIP projects, the older single-file `report.json`, and the report inside a `.pbix` (PBIR or the classic `Report/Layout`, including aliased `From` lists and JSON-string configs).
+- A PBIP report is linked to its model through `definition.pbir` (`byPath`); with a single model, it's linked to that model.
+- Rules use it: hidden columns and measures used by a visual are no longer reported as unnecessary, and two info rules, `unused-measure` and `unused-column`, flag visible objects that no measure, relationship or visual uses. They only run when a report is present, and their message notes that other reports on the same model aren't checked.
+- `diff` reports removed or renamed fields that visuals still use (`broken_visuals`, with the report, page and visual type), and `--fail-on-break` fails on them.
+- Fixture `retail-report` = the clean model plus a PBIR report that uses every visible field except [Order Lines] and Customer[Segment].
+
 ## Semantic diff (`datawright diff`)
 
 - Compares two Git revisions of a PBIP project (or a revision against the working tree) in model terms: tables, columns, measures and relationships added, removed or changed (field by field), plus the health-score delta and findings resolved or introduced.

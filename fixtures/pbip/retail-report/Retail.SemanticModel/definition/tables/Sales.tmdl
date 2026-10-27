@@ -1,0 +1,139 @@
+/// One row per order line.
+table Sales
+	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000021
+
+	/// Total sales amount in the order currency, before returns.
+	measure 'Total Sales' = SUM(Sales[Amount])
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000001
+
+	/// Total cost of goods sold for the selected orders.
+	measure 'Total Cost' = SUM(Sales[Cost])
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000002
+
+	/// Gross profit: total sales minus total cost.
+	measure Profit = [Total Sales] - [Total Cost]
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000003
+
+	/// Gross margin as a share of total sales.
+	measure 'Margin %' = DIVIDE([Profit], [Total Sales])
+		formatString: 0.0%
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000004
+
+	/// Number of sales order lines.
+	measure 'Order Lines' = COUNTROWS(Sales)
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000005
+
+	/// Change in total sales compared with the same period last year.
+	measure 'Sales YoY %' =
+			VAR CurrentSales = [Total Sales]
+			VAR PriorSales = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Calendar'[Date]))
+			RETURN
+				DIVIDE(CurrentSales - PriorSales, PriorSales)
+		formatString: 0.0%
+		displayFolder: Growth
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000006
+
+	/// Average sales amount per order.
+	measure 'Avg Order Value' = ```
+			DIVIDE([Total Sales], DISTINCTCOUNT(Sales[OrderID]))
+			```
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000007
+
+	/// Number of units sold.
+	measure Units = SUM(Sales[Quantity])
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000008
+
+	/// Total sales counted on the ship date instead of the order date.
+	measure 'Sales by Ship Date' = CALCULATE([Total Sales], USERELATIONSHIP(Sales[ShipDate], 'Calendar'[Date]))
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000009
+
+	/// Order number.
+	column OrderID
+		dataType: int64
+		formatString: 0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000a
+		summarizeBy: none
+		sourceColumn: OrderID
+
+	column OrderDate
+		dataType: dateTime
+		formatString: Long Date
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000b
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column ShipDate
+		dataType: dateTime
+		formatString: Long Date
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000c
+		summarizeBy: none
+		sourceColumn: ShipDate
+
+	column ProductKey
+		dataType: int64
+		formatString: 0
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000d
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column CustomerKey
+		dataType: int64
+		formatString: 0
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000e
+		summarizeBy: none
+		sourceColumn: CustomerKey
+
+	/// Units on the order line.
+	column Quantity
+		dataType: int64
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000f
+		summarizeBy: none
+		sourceColumn: Quantity
+
+	/// Price per unit at the time of the order.
+	column UnitPrice
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000010
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	/// Line amount: quantity times unit price.
+	column Amount
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000011
+		summarizeBy: none
+		sourceColumn: Amount
+
+	/// Cost of goods for the order line.
+	column Cost
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000012
+		summarizeBy: none
+		sourceColumn: Cost
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+					Source = Csv.Document(File.Contents(DataFolder & "sales.csv"), [Delimiter=",", Columns=9, Encoding=65001]),
+					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+					Typed = Table.TransformColumnTypes(Promoted, {{"OrderID", Int64.Type}, {"OrderDate", type date}, {"ShipDate", type date}, {"ProductKey", Int64.Type}, {"CustomerKey", Int64.Type}, {"Quantity", Int64.Type}, {"UnitPrice", Currency.Type}, {"Amount", Currency.Type}, {"Cost", Currency.Type}})
+				in
+					Typed
+
+	annotation PBI_ResultType = Table

@@ -111,6 +111,24 @@ class ModelIndex:
         t, c = table.casefold(), column.casefold()
         return (t, c) in self.referenced_columns or (None, c) in self.referenced_columns
 
+    def column_used(self, table: str, column: str) -> bool:
+        """Used by DAX, a relationship, a sort-by, a hierarchy or a report visual."""
+        key = (table.casefold(), column.casefold())
+        usage = self.model.report_usage
+        return (
+            self.is_column_referenced(table, column)
+            or key in self.relationship_columns
+            or key in self.sort_by_columns
+            or key in self.hierarchy_columns
+            or (usage is not None and usage.used(table, column))
+        )
+
+    def measure_used(self, table: str, measure: str) -> bool:
+        usage = self.model.report_usage
+        return measure.casefold() in self.referenced_measures or (
+            usage is not None and usage.used(table, measure)
+        )
+
     def is_measure(self, ref: Ref) -> bool:
         name = ref.name.casefold()
         if ref.table is None:
@@ -628,13 +646,7 @@ def _unused_columns(model: SemanticModel, ix: ModelIndex) -> Iterable[tuple[str,
         for c in t.columns:
             if not (c.is_hidden or t.is_hidden):
                 continue
-            key = (t.name.casefold(), c.name.casefold())
-            if not (
-                ix.is_column_referenced(t.name, c.name)
-                or key in ix.relationship_columns
-                or key in ix.sort_by_columns
-                or key in ix.hierarchy_columns
-            ):
+            if not ix.column_used(t.name, c.name):
                 unused.append(c)
         whole_table = (
             t.is_hidden
@@ -672,8 +684,52 @@ def _unused_columns(model: SemanticModel, ix: ModelIndex) -> Iterable[tuple[str,
 )
 def _unused_measures(model: SemanticModel, ix: ModelIndex) -> Iterable[tuple[str, str]]:
     for t, m in model.all_measures():
-        if (m.is_hidden or t.is_hidden) and m.name.casefold() not in ix.referenced_measures:
+        if (m.is_hidden or t.is_hidden) and not ix.measure_used(t.name, m.name):
             yield _mpath(model, t, m.name), f"Hidden measure [{m.name}] is not used anywhere."
+
+
+_REPORT_CAVEAT = "Only this file's report is checked; other reports on the same model may use it."
+
+
+@rule(
+    "unused-measure",
+    "Visible measures nothing uses",
+    "Maintenance",
+    "info",
+    "A visible measure no other measure and no visual uses clutters the field list and confuses "
+    f"Copilot. {_REPORT_CAVEAT}",
+)
+def _unused_visible_measures(model: SemanticModel, ix: ModelIndex) -> Iterable[tuple[str, str]]:
+    if model.report_usage is None:
+        return
+    for t, m in model.all_measures():
+        if _visible(t, m.is_hidden) and not ix.measure_used(t.name, m.name):
+            yield (
+                _mpath(model, t, m.name),
+                f"Measure [{m.name}] isn't used by any measure or by the report's visuals.",
+            )
+
+
+@rule(
+    "unused-column",
+    "Visible columns nothing uses",
+    "Maintenance",
+    "info",
+    "A visible column that no measure, relationship or visual uses still costs memory and refresh "
+    f"time. {_REPORT_CAVEAT}",
+)
+def _unused_visible_columns(model: SemanticModel, ix: ModelIndex) -> Iterable[tuple[str, str]]:
+    if model.report_usage is None:
+        return
+    for t in model.tables.values():
+        if t.is_hidden or t.is_auto_date or t.is_field_parameter:
+            continue
+        for c in t.columns:
+            if not c.is_hidden and not c.is_key and not ix.column_used(t.name, c.name):
+                yield (
+                    _cpath(model, t, c),
+                    f"Column {t.name}[{c.name}] isn't used by any measure, relationship or visual.",
+                )
 
 
 @rule(
