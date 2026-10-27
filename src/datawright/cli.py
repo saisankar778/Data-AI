@@ -78,20 +78,51 @@ def _fail(message: str) -> NoReturn:
 def check(
     path: Path,
     show_all: bool = typer.Option(False, "--all", help="List every finding, not just a summary."),
+    fmt: str = typer.Option("text", "--format", help="text, json, sarif or github."),
+    output: Path = typer.Option(None, "--output", help="Write json/sarif output to this file."),
+    fail_on: str = typer.Option(
+        "none", "--fail-on", help="CI gate: exit 1 on findings at or above none/info/warning/error."
+    ),
+    min_score: int = typer.Option(None, "--min-score", help="CI gate: exit 1 below this score."),
 ) -> None:
-    """Health-check a PBIP folder or a .pbix file: score, AI-readiness and top problems."""
+    """Health-check a PBIP folder or a .pbix file: score, AI-readiness and top problems.
+    For CI, use --format sarif/github/json with --fail-on and --min-score."""
+    from datawright.connectors.powerbi import ci
     from datawright.connectors.powerbi.health import health
     from datawright.connectors.powerbi.pbip import open_source
-    from datawright.connectors.powerbi.rules import rule_info
 
+    if fmt not in ("text", "json", "sarif", "github"):
+        _fail("--format must be text, json, sarif or github")
+    if fail_on not in ("none", "info", "warning", "error"):
+        _fail("--fail-on must be none, info, warning or error")
+    connector = open_source(path.resolve())
     try:
-        models = open_source(path.resolve()).models()
+        models = connector.models()
     except Exception as e:  # unreadable files must give a message, not a traceback
         _fail(f"could not read {path}: {e}")
     if not models:
         _fail(f"no Power BI model found in {path} (expected a .pbix file or a PBIP folder)")
-    for model in models.values():
-        h = health(model)
+    reports = [health(m) for m in models.values()]
+    if fmt == "text":
+        _print_health(reports, show_all)
+    else:
+        render = {"json": ci.to_json, "sarif": ci.to_sarif, "github": ci.to_github}[fmt]
+        text = render(connector, reports)
+        if output:
+            output.write_text(text, encoding="utf-8")
+            typer.echo(f"Wrote {output}")
+        else:
+            typer.echo(text)
+    reasons = ci.gate_failures(reports, fail_on, min_score)
+    if reasons:
+        typer.echo("Quality gate failed: " + "; ".join(reasons), err=True)
+        raise typer.Exit(1)
+
+
+def _print_health(reports: list[Any], show_all: bool) -> None:
+    from datawright.connectors.powerbi.rules import rule_info
+
+    for h in reports:
         typer.echo(f"\n{h.model} ({h.source}): health {h.score}/100, grade {h.grade}")
         typer.echo(f"  {h.tables} tables, {h.columns} columns, {h.measures} measures")
         typer.echo(
@@ -107,15 +138,13 @@ def check(
             for f in h.findings:
                 typer.echo(f"  {f.severity:7} {f.rule:32} {f.message}")
             continue
+        ranked = sorted(h.by_rule.items(), key=lambda x: (_sev_rank(rule_info(x[0])), -x[1]))
         typer.echo("\n  Top problems:")
-        for rule, n in sorted(h.by_rule.items(), key=lambda x: (_sev_rank(rule_info(x[0])), -x[1]))[
-            :10
-        ]:
+        for rule, n in ranked[:10]:
             info = rule_info(rule)
             example = next(f for f in h.findings if f.rule == rule)
-            title = info.title if info else rule
-            typer.echo(f"  - {title} ({n}): {example.message}")
-        typer.echo("\n  Run with --all for every finding.")
+            typer.echo(f"  - {info.title if info else rule} ({n}): {example.message}")
+        typer.echo("\n  Run with --all for every finding, or `datawright fix` for automatic fixes.")
 
 
 def _sev_rank(info: Any) -> int:

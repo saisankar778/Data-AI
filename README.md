@@ -83,6 +83,16 @@ Claude Code: `claude mcp add datawright -- C:\path\to\Data-AI\.venv\Scripts\data
 
 Then ask, for example, *"Use Datawright to check the health of my sales model and document the undocumented measures."* Claude can read and propose; you approve in the review UI.
 
+## Use it in CI (pull-request checks for Power BI projects)
+
+Copy [examples/github-actions/power-bi-checks.yml](examples/github-actions/power-bi-checks.yml) into `.github/workflows/` of the repository that holds your PBIP files. On every pull request it:
+
+- fails the check on errors or a low score (`datawright check . --fail-on error --min-score 60`);
+- shows each finding as a code-scanning alert on the exact TMDL line (SARIF);
+- comments with what the PR changes in the model and which DAX references it breaks (`datawright diff`).
+
+It runs on a Linux runner with no API key. Locally: `datawright check <folder> --format json|sarif|github`.
+
 ## Docs
 
 | File | What it is |

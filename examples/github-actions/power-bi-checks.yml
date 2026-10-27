@@ -1,0 +1,57 @@
+# Datawright checks for a Power BI project (PBIP) repository.
+# Copy this file to .github/workflows/ in the repo that holds your *.SemanticModel folders.
+#
+# On every pull request it:
+#   1. fails the check if the model has errors (or drops below a minimum score),
+#   2. shows findings as code-scanning alerts on the exact TMDL lines,
+#   3. comments on the PR with what changed in the model and which DAX references it breaks.
+# It runs on Linux: only PBIP files are read, and no API key is needed.
+name: Power BI model checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  datawright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Datawright
+        run: pip install "git+https://github.com/saisankar778/Data-AI.git"
+
+      - name: Health check (annotations + quality gate)
+        run: datawright check . --format github --fail-on error --min-score 60
+
+      - name: Findings as code-scanning alerts
+        if: always()
+        run: datawright check . --format sarif --output datawright.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: datawright.sarif
+          category: datawright
+
+      - name: What this pull request changes in the model
+        if: always()
+        run: >
+          datawright diff . --base "origin/${{ github.base_ref }}" --head HEAD
+          --out model-changes.md --fail-on-break
+
+      - name: Comment on the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file model-changes.md --edit-last || gh pr comment "${{ github.event.pull_request.number }}" --body-file model-changes.md
