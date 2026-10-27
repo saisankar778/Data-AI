@@ -1,3 +1,8 @@
+# Keep line endings as LF in the repository and the working copy on every OS.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.pbix binary
+
 # Fixtures and golden files are compared byte for byte; never convert their line endings.
 fixtures/** -text
 tests/golden/** -text
