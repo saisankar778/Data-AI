@@ -15,10 +15,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from datawright.config import HOST, Settings
+from datawright.connectors.powerbi.fixes import AUTO_FIXABLE, guidance
 from datawright.connectors.powerbi.health import health
 from datawright.connectors.powerbi.pbip import open_source
 from datawright.connectors.powerbi.rules import rule_info
 from datawright.core.changesets import ChangeSetError, ChangeSetService
+from datawright.fixing import propose_fixes
 from datawright.models import AgentRun, ChangeSet, Connection, Finding
 from datawright.services import bootstrap, connector_for
 
@@ -87,7 +89,9 @@ def create_app(
         )
 
     @app.get("/connections/{conn_id}", response_class=HTMLResponse)
-    def connection_detail(conn_id: int, request: Request, session: DB) -> HTMLResponse:
+    def connection_detail(
+        conn_id: int, request: Request, session: DB, notice: str | None = None
+    ) -> HTMLResponse:
         conn = session.get(Connection, conn_id)
         if conn is None:
             raise HTTPException(404, "connection not found")
@@ -96,9 +100,36 @@ def create_app(
             error = None
         except Exception as e:  # show unreadable models as a message, not a crash
             reports, error = [], f"Could not read the model: {e}"
+        can_fix = conn.kind == "pbip_repo" and conn.capability != "read"
         return render(
-            request, "health.html", conn=conn, reports=reports, error=error, info=rule_info
+            request,
+            "health.html",
+            conn=conn,
+            reports=reports,
+            error=error,
+            info=rule_info,
+            how=guidance,
+            auto=AUTO_FIXABLE,
+            can_fix=can_fix,
+            notice=notice,
         )
+
+    @app.post("/connections/{conn_id}/fix")
+    def connection_fix(conn_id: int, session: DB, csrf: Annotated[str, Form()] = "") -> Response:
+        if not secrets.compare_digest(csrf, csrf_token):
+            return PlainTextResponse("Missing or wrong CSRF token", status_code=403)
+        conn = session.get(Connection, conn_id)
+        if conn is None:
+            raise HTTPException(404, "connection not found")
+        try:
+            result = propose_fixes(session, conn, bootstrap(session))
+        except ValueError as e:
+            session.rollback()
+            return RedirectResponse(f"/connections/{conn_id}?notice={quote(str(e))}", 303)
+        if result.change_set is None:
+            msg = "Nothing can be fixed automatically; see the how-to-fix notes."
+            return RedirectResponse(f"/connections/{conn_id}?notice={quote(msg)}", 303)
+        return RedirectResponse(f"/change-sets/{result.change_set.id}", 303)
 
     @app.get("/connections/{conn_id}/guide", response_class=HTMLResponse)
     def connection_guide(conn_id: int, request: Request, session: DB) -> HTMLResponse:
@@ -127,6 +158,8 @@ def create_app(
             error=error,
             info=rule_info,
             path=path,
+            how=guidance,
+            auto=AUTO_FIXABLE,
         )
 
     @app.get("/runs/{run_id}", response_class=HTMLResponse)
@@ -173,9 +206,8 @@ def create_app(
         cs = get_cs(session, cs_id)
         decisions: dict[str, dict[str, object]] = {}
         n = 0
-        while f"path_{n}" in form:
-            path = str(form[f"path_{n}"])
-            decisions[path] = {
+        while f"id_{n}" in form:
+            decisions[str(form[f"id_{n}"])] = {
                 "accept": f"keep_{n}" in form,
                 "value": str(form.get(f"value_{n}", "")) or None,
             }

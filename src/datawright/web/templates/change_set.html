@@ -17,12 +17,15 @@
 <form method="post" action="/change-sets/{{ cs.id }}/approve">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <table>
-    <tr><th>Keep</th><th>Object</th><th>Text (you can edit it)</th></tr>
+    <tr><th>Keep</th><th>Object</th><th>Change</th><th>New value (text you can edit)</th></tr>
     {% set n = namespace(i=0) %}
     {% for item in cs.items %}{% for i in item.intents %}
     <tr><td><input type="checkbox" name="keep_{{ n.i }}" checked aria-label="keep this edit"></td>
-      <td><code>{{ i.object_path }}</code><input type="hidden" name="path_{{ n.i }}" value="{{ i.object_path }}"></td>
-      <td><textarea name="value_{{ n.i }}" rows="2" style="width:100%">{{ i.value }}</textarea></td></tr>
+      <td><code>{{ i.object_path }}</code><input type="hidden" name="id_{{ n.i }}" value="{{ i.id or i.object_path }}"></td>
+      <td>{{ 'description' if i.op == 'tmdl.set_description' else 'DAX expression' if i.op == 'tmdl.set_expression' else i.key }}
+        {% if i.rule %}<br><span class="muted">fixes {{ i.rule }}</span>{% endif %}</td>
+      <td>{% if i.value is string %}<textarea name="value_{{ n.i }}" rows="2" style="width:100%">{{ i.value }}</textarea>
+        {% else %}<code>{{ i.label or i.key }}</code>{% endif %}</td></tr>
     {% set n.i = n.i + 1 %}
     {% endfor %}{% endfor %}
   </table>

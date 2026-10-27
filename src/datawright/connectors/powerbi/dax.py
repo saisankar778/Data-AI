@@ -125,9 +125,38 @@ def references(dax: str) -> list[Ref]:
     return refs
 
 
+def masked(dax: str) -> str:
+    """Same length as `dax`, with strings, comments and the insides of names blanked out, so
+    what remains is operators, function names, parentheses and literals."""
+    return code_only(_blank_names(dax))
+
+
 def has_division_operator(dax: str) -> bool:
     """True when `/` is used as an operator: not in strings, [names], 'tables' or comments."""
-    return "/" in code_only(_blank_names(dax))
+    return "/" in masked(dax)
+
+
+def simple_division(dax: str) -> tuple[str, str] | None:
+    """(numerator, denominator) when the whole expression is exactly `A / B` with no other
+    top-level operator; None otherwise (rewriting anything more complex needs review by a person
+    or a model, not a regex)."""
+    code = masked(dax)
+    depth, slashes = 0, []
+    for i, ch in enumerate(code):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif depth == 0 and ch in "+-*/&|<>=^,":
+            if ch != "/":
+                return None
+            slashes.append(i)
+    if depth != 0 or len(slashes) != 1:
+        return None
+    lhs, rhs = dax[: slashes[0]].strip(), dax[slashes[0] + 1 :].strip()
+    if not lhs or not rhs or re.match(r"(?i)VAR\s", lhs):
+        return None
+    return lhs, rhs
 
 
 def _blank_names(dax: str) -> str:

@@ -52,6 +52,13 @@ Categories: Performance, DAX, Error prevention, Maintenance, Formatting, Naming,
 - Each edit in a proposed change set can be **accepted**, **rejected** or **edited** before approval. Approval rebuilds the items from the accepted and edited intents, then re-validates.
 - Decisions are stored on the change set (`feedback`), with counts: proposed, accepted unchanged, edited, rejected. The dashboard shows the acceptance rate.
 
+## Automatic fixes (`datawright fix`)
+
+- Fixable rules: numeric-column-summarize-by, hide-foreign-keys, mark-primary-keys, measure-format-string, sort-month-columns (only when there's exactly one month-number column), add-data-category, mark-date-table (which also resolves model-has-date-table), and use-divide-function (only a plain single-line `A / B`).
+- Each fix is one or more TMDL intents (`set_property`, `set_expression`), validated structurally like descriptions. Every edit has its own id, so two edits on the same column can be decided separately.
+- Anything that deletes, renames or needs judgement stays manual. Every rule has a "how to fix" note in the CLI, the UI and MCP.
+- Invariant (tested): applying all fixes to `retail-issues` removes exactly the fixed findings and introduces none.
+
 ## Ask (`ask-model`)
 
 - Read-only tools: `search_model`, `get_object`, `list_relationships`.

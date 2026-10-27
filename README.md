@@ -9,6 +9,7 @@ It runs **locally on your Windows laptop** next to Power BI Desktop. Model files
 | Command | What you get |
 |---|---|
 | `datawright check <file.pbix or PBIP folder>` | Health score, AI-readiness and top problems in seconds. 35 rules: Microsoft's Best Practice Analyzer rules, Power Query refresh risks, AI readiness. No setup, no API key |
+| `datawright fix <connection>` | Proposes safe automatic fixes (hide foreign keys, stop summing keys, mark the date table, format strings, sort months, `DIVIDE` for plain divisions) as a change set, and explains how to fix the rest by hand. Add `--dry-run` to preview |
 | `datawright connect` / `track` | Connect a `.pbix` (read only) or a PBIP folder in Git (read / propose / apply) |
 | `datawright document <connection>` | Claude drafts descriptions for undocumented tables, columns and measures, as a change set for review |
 | `datawright ask <connection> "question"` | Answers questions about the model ("which measure is margin?") and cites the objects it used |

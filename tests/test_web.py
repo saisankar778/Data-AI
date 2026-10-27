@@ -41,7 +41,7 @@ def csrf_of(html: str) -> str:
 def form_of(html: str) -> dict[str, str]:
     """The approve form's fields as a browser would send them (checked boxes only)."""
     fields = {"csrf": csrf_of(html)}
-    for name, value in re.findall(r'name="(path_\d+)" value="([^"]*)"', html):
+    for name, value in re.findall(r'name="(id_\d+)" value="([^"]*)"', html):
         fields[name] = value.replace("&#39;", "'").replace("&amp;", "&")
     for n in re.findall(r'name="keep_(\d+)" checked', html):
         fields[f"keep_{n}"] = "on"
@@ -96,7 +96,7 @@ def test_review_each_edit_then_apply_and_roll_back(
 ) -> None:
     page = client.get(f"/change-sets/{cs_id}").text
     form = form_of(page)
-    assert {"path_0", "path_1", "path_2", "keep_0", "keep_1", "keep_2"} <= set(form)
+    assert {"id_0", "id_1", "id_2", "keep_0", "keep_1", "keep_2"} <= set(form)
     del form["keep_1"]  # reject the second edit
     form["value_2"] = "Edited by a reviewer."
     r = client.post(f"/change-sets/{cs_id}/approve", data=form, follow_redirects=False)

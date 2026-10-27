@@ -80,7 +80,8 @@ class ChangeSetService:
             self.session.add(item)
             cs.items.append(item)
         new_after = apply_intent(item.after, intent)
-        item.intents = [*item.intents, intent]
+        next_id = 1 + max((int(i.get("id", 0)) for it in cs.items for i in it.intents), default=0)
+        item.intents = [*item.intents, {**intent, "id": str(next_id)}]
         item.after = new_after
         item.diff = unified_diff(file_path, item.before, item.after)
         self.session.flush()
@@ -124,12 +125,14 @@ class ChangeSetService:
             for intent in item.intents:
                 path = str(intent.get("object_path", ""))
                 proposed = intent.get("value")
-                d = decisions.get(path, {})
+                d = decisions.get(str(intent.get("id", ""))) or decisions.get(path, {})
                 if d.get("accept", True) is False:
                     feedback.append(_fb(path, proposed, None, "rejected"))
                     rejected_paths.add(path)
                     continue
-                final = d.get("value")
+                final = (
+                    d.get("value") if isinstance(proposed, str) else None
+                )  # flags can't be edited
                 if final is not None and " ".join(str(final).split()) != " ".join(
                     str(proposed or "").split()
                 ):

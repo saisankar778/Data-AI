@@ -5,6 +5,16 @@
 <h1>{{ conn.name }}</h1>
 <p class="muted">{{ conn.kind }} · allows {{ conn.capability }} · <code>{{ conn.path }}</code>
   · <a href="/connections/{{ conn.id }}/guide">Model guide</a></p>
+{% if can_fix %}
+<form class="inline" method="post" action="/connections/{{ conn.id }}/fix">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <button class="primary">Propose automatic fixes</button>
+  <span class="muted">Creates a change set you review edit by edit. Nothing changes until you apply it.</span>
+</form>
+{% elif conn.kind == 'pbix_file' %}
+<p class="muted">This is a .pbix file, so Datawright only reads it. To get fixes, save it as a Power BI Project
+  (File &gt; Save as &gt; .pbip) and run <code>datawright track</code> on that folder.</p>
+{% endif %}
 {% else %}
 <h1>Health check</h1>
 <p>Check any PBIP folder or <code>.pbix</code> file on this computer. Nothing is uploaded or changed.</p>
@@ -13,6 +23,7 @@
   <button class="primary">Check</button>
 </form>
 {% endif %}
+{% if notice %}<div class="error">{{ notice }}</div>{% endif %}
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
 {% for h in reports %}
@@ -25,12 +36,13 @@
 </div>
 {% if h.findings %}
 <table>
-  <tr><th>Severity</th><th>Problem</th><th>Count</th><th>Example</th></tr>
+  <tr><th>Severity</th><th>Problem</th><th>Count</th><th>Example</th><th>How to fix</th></tr>
   {% for rule, n in h.by_rule.most_common() %}
   {% set i = info(rule) %}{% set ex = h.findings | selectattr('rule', 'equalto', rule) | first %}
   <tr><td><span class="pill s-{{ 'failed' if ex.severity == 'error' else 'proposed' if ex.severity == 'warning' else '' }}">{{ ex.severity }}</span></td>
     <td><b>{{ i.title if i else rule }}</b><br><span class="muted">{{ i.why if i else '' }}{% if i and i.bpa %} · BPA {{ i.bpa }}{% endif %}</span></td>
-    <td>{{ n }}</td><td>{{ ex.message }}</td></tr>
+    <td>{{ n }}</td><td>{{ ex.message }}</td>
+    <td>{% if rule in auto %}<span class="pill s-applied">auto-fix</span> {% endif %}{{ how(rule) }}</td></tr>
   {% endfor %}
 </table>
 {% else %}<p>No problems found.</p>{% endif %}

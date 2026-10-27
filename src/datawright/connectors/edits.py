@@ -11,7 +11,9 @@ Apply = Callable[[str, dict[str, Any]], str]
 Check = Callable[[str, str, list[dict[str, Any]]], list[str]]
 
 OPS: dict[str, tuple[Apply, Check]] = {
-    "tmdl.set_description": (tmdl.apply_set_description, tmdl.check_set_description),
+    "tmdl.set_description": (tmdl.apply_set_description, tmdl.check_edits),
+    "tmdl.set_property": (tmdl.apply_set_property, tmdl.check_edits),
+    "tmdl.set_expression": (tmdl.apply_set_expression, tmdl.check_edits),
 }
 
 
@@ -40,7 +42,6 @@ def check_item(before: str, after: str, intents: list[dict[str, Any]]) -> list[s
         return [f"could not replay edit: {e}"]
     if text != after:
         problems.append("stored result differs from replaying the edits")
-    for op in {i["op"] for i in intents}:
-        _, check = OPS[op]
-        problems.extend(check(before, after, [i for i in intents if i["op"] == op]))
+    # All TMDL ops share one structural check, which must see every intent at once.
+    problems.extend(tmdl.check_edits(before, after, intents))
     return problems

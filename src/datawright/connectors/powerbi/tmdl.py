@@ -72,6 +72,8 @@ class TmdlObject:
     expression: str | None = None
     properties: dict[str, str] = field(default_factory=dict)
     children: list[TmdlObject] = field(default_factory=list)
+    header_end: int = 0  # first line after the declaration and its expression
+    prop_lines: dict[str, int] = field(default_factory=dict)  # simple property -> its line
 
     def child(self, kind: str, name: str) -> TmdlObject | None:
         return next((c for c in self.children if c.kind == kind and c.name == name), None)
@@ -223,6 +225,7 @@ def parse(text: str) -> TmdlDocument:
             if remainder.startswith("="):
                 expr, i = collect_expression(i, remainder[1:], indent + 2)
                 obj.expression = expr
+            obj.header_end = i
             (parent.children if parent else objects).append(obj)
             stack.append(obj)
             continue
@@ -237,6 +240,7 @@ def parse(text: str) -> TmdlDocument:
                     parent.properties[key] = expr
                     continue
                 parent.properties[key] = value if sep == ":" else "true"
+                parent.prop_lines[key] = i
         i += 1
     return TmdlDocument(text=text, objects=objects)
 
@@ -396,13 +400,20 @@ def clean_description(description: str) -> str:
     return "\n".join(lines)
 
 
-def set_description(
-    text: str, kind: str, name: str, description: str | None, table: str | None = None
-) -> str:
-    """Return `text` with the `///` block above the object replaced (or removed when empty).
+_BOM = chr(0xFEFF)
+FLAG_PROPERTIES = frozenset({"isHidden", "isKey", "isAvailableInMdx", "isNameInferred"})
 
-    `kind`/`name` identify the object; `table` is required for columns and measures.
-    """
+
+@dataclass
+class _Located:
+    doc: TmdlDocument
+    obj: TmdlObject
+    bom: str
+    newline: str
+    lines: list[str]
+
+
+def _locate(text: str, kind: str, name: str, table: str | None) -> _Located:
     doc = parse(text)
     parent: tuple[str, str] | None = None
     if kind in ("column", "measure"):
@@ -413,13 +424,26 @@ def set_description(
     if obj is None:
         where = f" in table {table!r}" if table else ""
         raise TmdlError(f"{kind} {name!r} not found{where}")
-
-    bom = "\ufeff" if text.startswith("\ufeff") else ""
+    bom = _BOM if text.startswith(_BOM) else ""
     body = text[len(bom) :]
     newline = "\r\n" if "\r\n" in body else "\n"
-    lines = body.splitlines(keepends=True)
-    decl = lines[obj.line]
-    lead = decl[: len(decl) - len(decl.lstrip("\t "))]
+    return _Located(doc, obj, bom, newline, body.splitlines(keepends=True))
+
+
+def _lead(line: str) -> str:
+    return line[: len(line) - len(line.lstrip("\t "))]
+
+
+def set_description(
+    text: str, kind: str, name: str, description: str | None, table: str | None = None
+) -> str:
+    """Return `text` with the `///` block above the object replaced (or removed when empty).
+
+    `kind`/`name` identify the object; `table` is required for columns and measures.
+    """
+    loc = _locate(text, kind, name, table)
+    obj, lines = loc.obj, loc.lines
+    lead = _lead(lines[obj.line])
     start = obj.line
     while (
         start > 0
@@ -431,8 +455,66 @@ def set_description(
     new_block = []
     if description:
         for ln in clean_description(description).split("\n"):
-            new_block.append(f"{lead}/// {ln}".rstrip() + newline)
-    return bom + "".join(lines[:start] + new_block + lines[obj.line :])
+            new_block.append(f"{lead}/// {ln}".rstrip() + loc.newline)
+    return loc.bom + "".join(lines[:start] + new_block + lines[obj.line :])
+
+
+def set_property(
+    text: str, kind: str, name: str, key: str, value: str | bool | None, table: str | None = None
+) -> str:
+    """Set, replace or remove one simple property (`key: value`, or a bare flag like `isHidden`).
+
+    `value=True` writes a flag, `None`/`False` removes the property. Everything else in the file
+    keeps its bytes. Expression properties (`source = ...`) can't be changed this way."""
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+        raise TmdlError(f"invalid property name {key!r}")
+    if isinstance(value, str) and ("\n" in value or "\r" in value or not value.strip()):
+        raise TmdlError("a property value must be one non-empty line")
+    loc = _locate(text, kind, name, table)
+    obj, lines = loc.obj, loc.lines
+    if key in obj.properties and key not in obj.prop_lines:
+        raise TmdlError(f"{key} is an expression property; it can't be set as a simple value")
+    if obj.prop_lines:
+        child_lead = _lead(lines[min(obj.prop_lines.values())])
+    else:
+        unit = "\t" if "\t" in _lead(lines[obj.line]) or not _lead(lines[obj.line]) else "    "
+        child_lead = _lead(lines[obj.line]) + unit
+    new_line = None
+    if value is True:
+        new_line = f"{child_lead}{key}{loc.newline}"
+    elif isinstance(value, str):
+        new_line = f"{child_lead}{key}: {value.strip()}{loc.newline}"
+    if key in obj.prop_lines:
+        idx = obj.prop_lines[key]
+        replacement = [new_line] if new_line else []
+        return loc.bom + "".join(lines[:idx] + replacement + lines[idx + 1 :])
+    if new_line is None:
+        return text
+    at = obj.header_end
+    return loc.bom + "".join(lines[:at] + [new_line] + lines[at:])
+
+
+def set_expression(
+    text: str, kind: str, name: str, expression: str, table: str | None = None
+) -> str:
+    """Replace a single-line expression (`measure X = <expr>`). Multi-line expressions are refused:
+    rewriting them safely needs a person (or Claude, with review)."""
+    if "\n" in expression or "\r" in expression or not expression.strip():
+        raise TmdlError("the new expression must be one non-empty line")
+    loc = _locate(text, kind, name, table)
+    obj, lines = loc.obj, loc.lines
+    if obj.expression is None or obj.header_end != obj.line + 1:
+        raise TmdlError(f"{kind} {name!r} has no single-line expression to replace")
+    decl = lines[obj.line]
+    body = decl.rstrip("\r\n")
+    ending = decl[len(body) :]
+    stripped = body.lstrip("\t ")
+    _keyword, _, rest = stripped.partition(" ")
+    _name, remainder = _parse_name(rest)
+    eq = remainder.index("=")
+    prefix = body[: len(body) - len(remainder) + eq + 1]
+    lines[obj.line] = f"{prefix} {expression.strip()}{ending}"
+    return loc.bom + "".join(lines)
 
 
 def apply_set_description(text: str, intent: dict[str, Any]) -> str:
@@ -441,43 +523,55 @@ def apply_set_description(text: str, intent: dict[str, Any]) -> str:
     )
 
 
-def check_set_description(before: str, after: str, intents: list[dict[str, Any]]) -> list[str]:
-    """Structural check: every intended description is present, nothing else changed."""
-    problems: list[str] = []
+def apply_set_property(text: str, intent: dict[str, Any]) -> str:
+    return set_property(
+        text, intent["kind"], intent["name"], intent["key"], intent.get("value"),
+        table=intent.get("table"),
+    )  # fmt: skip
+
+
+def apply_set_expression(text: str, intent: dict[str, Any]) -> str:
+    return set_expression(
+        text, intent["kind"], intent["name"], intent["value"], table=intent.get("table")
+    )
+
+
+def _expected(doc: TmdlDocument, intents: list[dict[str, Any]]) -> list[TmdlObject]:
+    """Apply the intents to a copy of the parsed objects (what `after` must parse to)."""
+    import copy
+
+    objects = copy.deepcopy(doc.objects)
+    tmp = TmdlDocument(doc.text, objects)
+    for intent in intents:
+        parent = ("table", intent["table"]) if intent.get("table") else None
+        obj = tmp.find(intent["kind"], intent["name"], parent)
+        if obj is None:
+            raise TmdlError(f"{intent['kind']} {intent['name']!r} not found")
+        op = intent.get("op", "tmdl.set_description")
+        if op == "tmdl.set_description":
+            value = intent.get("value")
+            obj.description = clean_description(value) if value else None
+        elif op == "tmdl.set_property":
+            value = intent.get("value")
+            if value is None or value is False:
+                obj.properties.pop(intent["key"], None)
+            else:
+                obj.properties[intent["key"]] = "true" if value is True else str(value).strip()
+        elif op == "tmdl.set_expression":
+            obj.expression = str(intent["value"]).strip()
+    return objects
+
+
+def check_edits(before: str, after: str, intents: list[dict[str, Any]]) -> list[str]:
+    """Structural check: `after` parses to exactly `before` plus the intended changes."""
     try:
         b, a = parse(before), parse(after)
+        expected = _expected(b, intents)
     except TmdlError as e:
-        return [f"TMDL no longer parses: {e}"]
-    targets = {(i.get("table"), i["kind"], i["name"]): i.get("value") for i in intents}
-    for (table, kind, name), value in targets.items():
-        parent = ("table", table) if table else None
-        obj = a.find(kind, name, parent)
-        if obj is None:
-            problems.append(f"{kind} {name!r} missing after edit")
-        elif (obj.description or None) != (clean_description(value) if value else None):
-            problems.append(f"{kind} {name!r} description is not the proposed text")
+        return [f"TMDL check failed: {e}"]
+    if [o.structure() for o in expected] != [o.structure() for o in a.objects]:
+        return ["the edit changed something other than the intended changes"]
+    return []
 
-    def strip(doc: TmdlDocument) -> Any:
-        out = []
-        for o in doc.objects:
-            s = o.structure()
-            if o.kind == "table":
-                kids = []
-                for c in o.children:
-                    skip = (c.kind, c.name) if (o.name, c.kind, c.name) in targets else None
-                    kids.append(c.structure(skip))
-                desc = None if (None, "table", o.name) in targets else o.description
-                s = (
-                    o.kind,
-                    o.name,
-                    desc,
-                    o.expression,
-                    tuple(sorted(o.properties.items())),
-                    tuple(kids),
-                )
-            out.append(s)
-        return out
 
-    if strip(b) != strip(a):
-        problems.append("the edit changed something other than the targeted descriptions")
-    return problems
+check_set_description = check_edits

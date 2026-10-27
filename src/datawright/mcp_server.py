@@ -284,6 +284,34 @@ class DatawrightTools:
 
         return self.call("submit_for_review", {"connection": connection}, run)
 
+    def propose_fixes(self, connection: str, rules: str = "") -> dict[str, Any]:
+        def run(session: Session, user: User) -> dict[str, Any]:
+            from collections import Counter
+
+            from datawright.connectors.powerbi.fixes import guidance
+            from datawright.fixing import propose_fixes
+
+            conn = get_connection(session, connection)
+            rule_set = {r.strip() for r in rules.split(",") if r.strip()} or None
+            result = propose_fixes(session, conn, user, rule_set)
+            cs = result.change_set
+            return {
+                "fixed_automatically": [f.summary for f in result.fixes],
+                "change_set": cs.id if cs else None,
+                "review_url": f"http://{HOST}:{self.settings.port}/change-sets/{cs.id}"
+                if cs
+                else None,
+                "needs_a_person": [
+                    {"rule": rule, "count": n, "how_to_fix": guidance(rule)}
+                    for rule, n in Counter(m.rule for m in result.manual).most_common()
+                ],
+                "next": "Ask the user to review and approve the change set in the Datawright UI."
+                if cs
+                else "Nothing could be fixed automatically.",
+            }
+
+        return self.call("propose_fixes", {"connection": connection, "rules": rules}, run)
+
 
 def build_server(settings: Settings | None = None) -> Any:
     from mcp.server.mcpserver import MCPServer
@@ -360,5 +388,15 @@ def build_server(settings: Settings | None = None) -> Any:
     )
     def submit_for_review(connection: str) -> dict[str, Any]:
         return tools.submit_for_review(connection)
+
+    @server.tool(
+        description="Propose automatic fixes for audit findings (hide foreign keys, stop "
+        "summing keys, mark the date table, format strings, DIVIDE for plain divisions, ...) "
+        "as a change set for human review, and list how to fix the rest by hand. "
+        "rules: optional comma-separated rule ids.",
+        annotations=propose,
+    )
+    def propose_fixes(connection: str, rules: str = "") -> dict[str, Any]:
+        return tools.propose_fixes(connection, rules)
 
     return server

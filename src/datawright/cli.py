@@ -215,6 +215,49 @@ def guide(
         typer.echo(text)
 
 
+@app.command()
+def fix(
+    connection: str,
+    rules: str = typer.Option("", help="Only these rule ids (comma-separated)."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show the plan; change nothing."),
+) -> None:
+    """Propose automatic fixes for audit findings (a change set to review), and say how to fix
+    the rest by hand."""
+    from collections import Counter
+
+    from datawright.connectors.powerbi.fixes import guidance
+    from datawright.fixing import preview_fixes, propose_fixes
+    from datawright.services import get_connection
+
+    rule_set = {r.strip() for r in rules.split(",") if r.strip()} or None
+    with opened() as (settings, session, user):
+        try:
+            conn = get_connection(session, connection)
+            if dry_run:
+                fixes, manual = preview_fixes(conn, rule_set)
+                cs = None
+            else:
+                result = propose_fixes(session, conn, user, rule_set)
+                fixes, manual, cs = result.fixes, result.manual, result.change_set
+                for f, why in result.skipped:
+                    typer.echo(f"  skipped {f.summary}: {why}")
+        except ValueError as e:
+            _fail(str(e))
+        verb = "Would fix" if dry_run else "Proposed"
+        typer.echo(f"{verb} {len(fixes)} findings automatically:")
+        for f in fixes:
+            typer.echo(f"  - {f.summary}")
+        if cs is not None:
+            typer.echo(
+                f"Change set #{cs.id}: {cs.status} -> http://{HOST}:{settings.port}"
+                f"/change-sets/{cs.id}  (review, approve, then apply)"
+            )
+        if manual:
+            typer.echo(f"\n{len(manual)} findings need a person:")
+            for rule, n in Counter(m.rule for m in manual).most_common():
+                typer.echo(f"  - {rule} ({n}): {guidance(rule)}")
+
+
 # ---------------------------------------------------------------- agents
 
 
