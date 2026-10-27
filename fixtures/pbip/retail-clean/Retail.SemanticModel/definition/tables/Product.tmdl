@@ -1,34 +1,41 @@
+/// Products we sell.
 table Product
-	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000015
+	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000022
 
 	/// Number of distinct products.
 	measure 'Product Count' = DISTINCTCOUNT(Product[ProductKey])
 		formatString: #,0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000016
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000013
 
+	/// Product identifier.
 	column ProductKey
 		dataType: int64
+		isKey
 		formatString: 0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000011
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000014
 		summarizeBy: none
 		sourceColumn: ProductKey
 
+	/// Name of the product.
 	column 'Product Name'
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000012
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000015
 		summarizeBy: none
 		sourceColumn: Product Name
 
+	/// Product category.
 	column Category
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000013
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000016
 		summarizeBy: none
 		sourceColumn: Category
 
+	/// Current list price.
 	column ListPrice
 		dataType: decimal
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000014
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000017
 		summarizeBy: none
 		sourceColumn: ListPrice
 
@@ -36,9 +43,10 @@ table Product
 		mode: import
 		source =
 				let
-					Source = Csv.Document(File.Contents("C:\Data\product.csv"), [Delimiter=",", Columns=4, Encoding=65001]),
-					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true])
+					Source = Csv.Document(File.Contents(DataFolder & "product.csv"), [Delimiter=",", Columns=4, Encoding=65001]),
+					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+					Typed = Table.TransformColumnTypes(Promoted, {{"ProductKey", Int64.Type}, {"Product Name", type text}, {"Category", type text}, {"ListPrice", Currency.Type}})
 				in
-					Promoted
+					Typed
 
 	annotation PBI_ResultType = Table

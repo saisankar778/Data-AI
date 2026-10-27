@@ -1,0 +1,30 @@
+# Needs a model. Runs the documenter on retail-issues (all visible undocumented objects) and checks
+# each proposed description: present, <= 300 chars, no raw DAX, mentions one of the given words.
+# This is a floor, not a quality score; rubric grading with a model judge comes next.
+name: describe-v1
+kind: describe
+fixture: retail-issues
+kinds: [measure, column, table]
+limit: 30
+cases:
+  - {id: m-total-sales, object: Retail/Sales/measure/Total Sales, must_mention_any: [sales, amount]}
+  - {id: m-total-cost, object: Retail/Sales/measure/Total Cost, must_mention_any: [cost]}
+  - {id: m-profit, object: Retail/Sales/measure/Profit, must_mention_any: [profit, sales, cost]}
+  - {id: m-margin, object: Retail/Sales/measure/Margin %, must_mention_any: [margin, profit]}
+  - {id: m-sales-yoy, object: Retail/Sales/measure/Sales YoY %, must_mention_any: [year, prior, previous, YoY]}
+  - {id: m-avg-order-value, object: Retail/Sales/measure/Avg Order Value, must_mention_any: [order]}
+  - {id: m-units, object: "Retail/Sales/measure/Units ", must_mention_any: [unit, quantit]}
+  - {id: m-revenue, object: Retail/Sales/measure/Revenue, must_mention_any: [revenue, sales]}
+  - {id: m-gross-sales, object: Retail/Sales/measure/Gross Sales, must_mention_any: [sales, amount, gross]}
+  - {id: m-product-count, object: Retail/Product/measure/Product Count, must_mention_any: [product]}
+  - {id: m-customer-count, object: Retail/Customer/measure/Customer Count, must_mention_any: [customer]}
+  - {id: c-order-id, object: Retail/Sales/column/OrderID, must_mention_any: [order]}
+  - {id: c-order-date, object: Retail/Sales/column/OrderDate, must_mention_any: [order, date]}
+  - {id: c-ship-date, object: Retail/Sales/column/ShipDate, must_mention_any: [ship]}
+  - {id: c-product-key, object: Retail/Sales/column/ProductKey, must_mention_any: [product]}
+  - {id: c-customer-key, object: Retail/Sales/column/CustomerKey, must_mention_any: [customer]}
+  - {id: c-quantity, object: Retail/Sales/column/Quantity, must_mention_any: [quantit, unit]}
+  - {id: c-unit-price, object: Retail/Sales/column/UnitPrice, must_mention_any: [price]}
+  - {id: c-amount, object: Retail/Sales/column/Amount, must_mention_any: [amount]}
+  - {id: c-cost, object: Retail/Sales/column/Cost, must_mention_any: [cost]}
+  - {id: t-sales, object: Retail/Sales, must_mention_any: [order, sales]}

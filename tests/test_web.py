@@ -5,11 +5,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from datawright.agents.documenter import offline_script, run_documenter
 from datawright.agents.scripted import ScriptedClient
-from datawright.config import Settings
+from datawright.config import FIXTURES_DIR, Settings
 from datawright.core import gitops
 from datawright.models import ChangeSet, Connection, User
 from datawright.web.app import create_app
@@ -22,8 +23,12 @@ def client(settings: Settings, sessions: sessionmaker[Session]) -> TestClient:
 
 @pytest.fixture
 def cs_id(session: Session, settings: Settings, user: User, conn: Connection) -> int:
-    run = run_documenter(session, settings, ScriptedClient(offline_script(2)), conn, user, limit=2)
-    cs = session.query(ChangeSet).filter_by(run_id=run.id).one()
+    run = run_documenter(
+        session, settings, ScriptedClient(offline_script(3)), conn, user, limit=3,
+        kinds=["measure"],
+    )  # fmt: skip
+    cs = session.scalar(select(ChangeSet).where(ChangeSet.run_id == run.id))
+    assert cs is not None
     return cs.id
 
 
@@ -33,12 +38,41 @@ def csrf_of(html: str) -> str:
     return m.group(1)
 
 
-def test_pages_render(client: TestClient, cs_id: int) -> None:
+def form_of(html: str) -> dict[str, str]:
+    """The approve form's fields as a browser would send them (checked boxes only)."""
+    fields = {"csrf": csrf_of(html)}
+    for name, value in re.findall(r'name="(path_\d+)" value="([^"]*)"', html):
+        fields[name] = value.replace("&#39;", "'").replace("&amp;", "&")
+    for n in re.findall(r'name="keep_(\d+)" checked', html):
+        fields[f"keep_{n}"] = "on"
+    for name, value in re.findall(r'<textarea name="(value_\d+)"[^>]*>([^<]*)</textarea>', html):
+        fields[name] = value
+    return fields
+
+
+def test_pages_render(client: TestClient, cs_id: int, conn: Connection) -> None:
     assert "Overview" in client.get("/").text
     page = client.get(f"/change-sets/{cs_id}").text
     assert "proposed" in page and "Offline draft" in page and 'class="add"' in page
+    assert "Approve the kept edits" in page
     assert "propose_description" in client.get("/runs/1").text
     assert "measure-missing-description" in client.get("/findings").text
+    health = client.get(f"/connections/{conn.id}").text
+    assert "health score" in health and "Hard-code" not in health
+    assert "Don&#39;t hard-code local file paths in Power Query" in health
+    guide = client.get(f"/connections/{conn.id}/guide").text
+    assert "Model guide: Retail" in guide and "Order Lines" in guide
+
+
+def test_check_page_reads_any_path(client: TestClient) -> None:
+    page = client.get("/check", params={"path": str(FIXTURES_DIR / "pbip" / "retail-clean")}).text
+    assert ">100<" in page and "No problems found." in page
+    pbix = client.get(
+        "/check", params={"path": str(FIXTURES_DIR / "pbix" / "Revenue Opportunities.pbix")}
+    )
+    assert "Revenue Opportunities" in pbix.text and "(pbix)" in pbix.text
+    missing = client.get("/check", params={"path": "C:/nope/missing"}).text
+    assert "No Power BI model found" in missing
 
 
 def test_foreign_hosts_and_origins_are_refused(client: TestClient, cs_id: int) -> None:
@@ -53,24 +87,33 @@ def test_foreign_hosts_and_origins_are_refused(client: TestClient, cs_id: int) -
     assert r.status_code == 403
     r = client.post(f"/change-sets/{cs_id}/approve", data={"csrf": "wrong"}, follow_redirects=False)
     assert r.status_code == 403
+    r = client.post(f"/change-sets/{cs_id}/apply", data={"csrf": "wrong"}, follow_redirects=False)
+    assert r.status_code == 403
 
 
-def test_approve_apply_rollback_through_the_ui(
+def test_review_each_edit_then_apply_and_roll_back(
     client: TestClient, cs_id: int, repo: Path, session: Session
 ) -> None:
-    token = csrf_of(client.get(f"/change-sets/{cs_id}").text)
-    for action in ("approve", "apply"):
-        r = client.post(
-            f"/change-sets/{cs_id}/{action}",
-            data={"csrf": token, "comment": "ok"},
-            headers={"origin": "http://testserver"},
-            follow_redirects=False,
-        )
-        assert r.status_code == 303 and "error" not in r.headers["location"]
+    page = client.get(f"/change-sets/{cs_id}").text
+    form = form_of(page)
+    assert {"path_0", "path_1", "path_2", "keep_0", "keep_1", "keep_2"} <= set(form)
+    del form["keep_1"]  # reject the second edit
+    form["value_2"] = "Edited by a reviewer."
+    r = client.post(f"/change-sets/{cs_id}/approve", data=form, follow_redirects=False)
+    assert r.status_code == 303 and "error" not in r.headers["location"]
+    page = client.get(f"/change-sets/{cs_id}").text
+    assert "1 accepted as proposed" in page and "1 edited" in page and "1 rejected" in page
+
+    token = csrf_of(page)
+    r = client.post(f"/change-sets/{cs_id}/apply", data={"csrf": token}, follow_redirects=False)
+    assert r.status_code == 303 and "error" not in r.headers["location"]
     page = client.get(f"/change-sets/{cs_id}").text
     assert "applied" in page and f"datawright/cs-{cs_id}" in page
-    assert gitops.branch_sha(repo, f"datawright/cs-{cs_id}") is not None
+    sha = gitops.branch_sha(repo, f"datawright/cs-{cs_id}")
+    assert sha is not None
+    assert "Edited by a reviewer." in gitops.git(repo, "show", sha).decode()
     assert gitops.out(repo, "status", "--porcelain") == ""
+    assert "of proposed edits" in client.get("/").text  # acceptance metric on the dashboard
 
     r = client.post(f"/change-sets/{cs_id}/rollback", data={"csrf": token}, follow_redirects=False)
     assert r.status_code == 303

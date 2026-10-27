@@ -27,4 +27,4 @@ jobs:
       - name: Tests
         run: python -m pytest
       - name: Evals (deterministic sets)
-        run: datawright evals run --set audit-rules-v0
+        run: datawright evals run --set audit-rules-v1

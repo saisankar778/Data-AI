@@ -23,13 +23,19 @@ def apply_intent(text: str, intent: dict[str, Any]) -> str:
     return apply(text, intent)
 
 
+def replay(before: str, intents: list[dict[str, Any]]) -> str:
+    """Apply every intent in order, starting from `before`."""
+    text = before
+    for intent in intents:
+        text = apply_intent(text, intent)
+    return text
+
+
 def check_item(before: str, after: str, intents: list[dict[str, Any]]) -> list[str]:
     """Re-run every intent from `before` and require the exact same `after`, then the op checks."""
     problems: list[str] = []
-    text = before
     try:
-        for intent in intents:
-            text = apply_intent(text, intent)
+        text = replay(before, intents)
     except (ValueError, KeyError) as e:
         return [f"could not replay edit: {e}"]
     if text != after:

@@ -1,32 +1,42 @@
+/// Customers who placed orders.
 table Customer
-	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001b
+	lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000027
 
 	measure 'Customer Count' = DISTINCTCOUNT(Customer[CustomerKey])
 		formatString: #,0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001c
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000001b
 
+	measure 'Old Customer Count' = COUNTROWS(Customer)
+		formatString: #,0
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000001c
+
+	/// Customer identifier.
 	column CustomerKey
 		dataType: int64
 		formatString: 0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000017
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000001d
 		summarizeBy: none
 		sourceColumn: CustomerKey
 
+	/// Customer name.
 	column 'Customer Name'
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000018
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000001e
 		summarizeBy: none
 		sourceColumn: Customer Name
 
+	/// City of the customer's billing address.
 	column City
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000019
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000001f
 		summarizeBy: none
 		sourceColumn: City
 
+	/// Customer segment.
 	column Segment
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001a
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000020
 		summarizeBy: none
 		sourceColumn: Segment
 

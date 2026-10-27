@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from datawright.connectors.edits import apply_intent, check_item
+from datawright.connectors.edits import apply_intent, check_item, replay
 from datawright.core import audit_log, gitops
 from datawright.core.capabilities import APPROVER_ROLES, Capability
 from datawright.models import ChangeItem, ChangeSet, Connection, Finding, User, utcnow
@@ -31,6 +31,13 @@ def unified_diff(path: str, before: str, after: str) -> str:
         tofile=f"b/{path}",
     )
     return "".join(ln if ln.endswith("\n") else ln + "\n" for ln in lines)
+
+
+Decision = dict[str, Any]
+
+
+def _fb(path: str, proposed: Any, final: Any, decision: str) -> dict[str, Any]:
+    return {"object_path": path, "proposed": proposed, "final": final, "decision": decision}
 
 
 def branch_name(cs: ChangeSet) -> str:
@@ -95,21 +102,113 @@ class ChangeSetService:
 
     # ------------------------------------------------------------ review
 
-    def approve(self, cs: ChangeSet, comment: str | None = None) -> None:
+    def approve(
+        self,
+        cs: ChangeSet,
+        comment: str | None = None,
+        decisions: dict[str, Decision] | None = None,
+    ) -> None:
+        """Approve, optionally deciding edit by edit.
+
+        `decisions` maps an object path to {"accept": bool, "value": str | None}. Paths not in it
+        are accepted as proposed. Rejected edits are dropped, edited ones replace the proposed
+        text, and the remaining edits are re-validated before the set is approved.
+        """
         self._require(cs, "proposed")
         self._require_approver()
+        decisions = decisions or {}
+        feedback: list[dict[str, Any]] = []
+        rejected_paths: set[str] = set()
+        for item in list(cs.items):
+            keep = []
+            for intent in item.intents:
+                path = str(intent.get("object_path", ""))
+                proposed = intent.get("value")
+                d = decisions.get(path, {})
+                if d.get("accept", True) is False:
+                    feedback.append(_fb(path, proposed, None, "rejected"))
+                    rejected_paths.add(path)
+                    continue
+                final = d.get("value")
+                if final is not None and " ".join(str(final).split()) != " ".join(
+                    str(proposed or "").split()
+                ):
+                    keep.append(
+                        {
+                            **intent,
+                            "value": " ".join(str(final).split()),
+                            "proposed_value": proposed,
+                        }
+                    )
+                    feedback.append(_fb(path, proposed, keep[-1]["value"], "edited"))
+                else:
+                    keep.append(intent)
+                    feedback.append(_fb(path, proposed, proposed, "accepted"))
+            try:
+                item.after = replay(item.before, keep)
+            except ValueError as e:
+                raise ChangeSetError(f"{item.file_path}: {e}") from e
+            item.intents = keep
+            item.diff = unified_diff(item.file_path, item.before, item.after)
+        if not any(i.intents for i in cs.items):
+            raise ChangeSetError("every edit was rejected; reject the change set instead")
+        problems = [
+            f"{i.file_path}: {p}"
+            for i in cs.items
+            if i.intents
+            for p in check_item(i.before, i.after, i.intents)
+        ]
+        if problems:
+            raise ChangeSetError("; ".join(problems))
+        for item in [i for i in cs.items if not i.intents]:
+            self._unlink_findings([item.id], None)
+            cs.items.remove(item)
+            self.session.delete(item)
+        self._unlink_findings([i.id for i in cs.items], rejected_paths)
+        self._record_feedback(cs, feedback)
         cs.review_comment = (comment or "").strip() or None
         cs.reviewed_by = self.actor.name
-        self._move(cs, "approved", comment=cs.review_comment)
+        self._move(
+            cs,
+            "approved",
+            comment=cs.review_comment,
+            accepted=cs.accepted_count,
+            edited=cs.edited_count,
+            rejected=cs.rejected_count,
+        )
 
     def reject(self, cs: ChangeSet, comment: str) -> None:
         self._require(cs, "proposed")
         self._require_approver()
         if not comment.strip():
             raise ChangeSetError("a rejection needs a comment (it becomes feedback for evals)")
+        self._record_feedback(
+            cs,
+            [
+                _fb(str(i.get("object_path", "")), i.get("value"), None, "rejected")
+                for item in cs.items
+                for i in item.intents
+            ],
+        )
+        self._unlink_findings([i.id for i in cs.items], None)
         cs.review_comment = comment.strip()
         cs.reviewed_by = self.actor.name
         self._move(cs, "rejected", comment=cs.review_comment)
+
+    def _record_feedback(self, cs: ChangeSet, feedback: list[dict[str, Any]]) -> None:
+        cs.feedback = feedback
+        cs.proposed_count = len(feedback)
+        cs.accepted_count = sum(f["decision"] == "accepted" for f in feedback)
+        cs.edited_count = sum(f["decision"] == "edited" for f in feedback)
+        cs.rejected_count = sum(f["decision"] == "rejected" for f in feedback)
+
+    def _unlink_findings(self, item_ids: list[int], paths: set[str] | None) -> None:
+        """Findings tied to rejected edits go back to open, unlinked (paths=None: all)."""
+        query = select(Finding).where(Finding.change_item_id.in_(item_ids))
+        for f in self.session.scalars(query):
+            if paths is None or f.object_path in paths:
+                f.change_item_id = None
+                f.status = "open"
 
     # ------------------------------------------------------------ writes
 

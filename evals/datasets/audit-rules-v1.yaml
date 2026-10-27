@@ -1,0 +1,217 @@
+# Deterministic. Each case lists exactly what one rule must find on a fixture (see
+# fixtures/README.md). Written from the fixture design, not copied from rule output.
+name: audit-rules-v1
+kind: audit-rules
+cases:
+  - id: clean-model-has-no-findings
+    fixture: retail-clean
+  - id: measure-missing-description
+    fixture: retail-issues
+    rule: measure-missing-description
+    objects:
+      - "Retail/Sales/measure/Total Sales"
+      - "Retail/Sales/measure/Total Cost"
+      - "Retail/Sales/measure/Profit"
+      - "Retail/Sales/measure/Margin %"
+      - "Retail/Sales/measure/Sales YoY %"
+      - "Retail/Sales/measure/Avg Order Value"
+      - "Retail/Sales/measure/Units "
+      - "Retail/Sales/measure/Revenue"
+      - "Retail/Sales/measure/Gross Sales"
+      - "Retail/Product/measure/Product Count"
+      - "Retail/Customer/measure/Customer Count"
+  - id: object-missing-description
+    fixture: retail-issues
+    rule: object-missing-description
+    objects:
+      - "Retail/Sales"
+      - "Retail/Sales/column/OrderID"
+      - "Retail/Sales/column/OrderDate"
+      - "Retail/Sales/column/ShipDate"
+      - "Retail/Sales/column/ProductKey"
+      - "Retail/Sales/column/CustomerKey"
+      - "Retail/Sales/column/Quantity"
+      - "Retail/Sales/column/UnitPrice"
+      - "Retail/Sales/column/Amount"
+      - "Retail/Sales/column/Cost"
+  - id: numeric-column-summarize-by
+    fixture: retail-issues
+    rule: numeric-column-summarize-by
+    objects:
+      - "Retail/Sales/column/ProductKey"
+      - "Retail/Sales/column/CustomerKey"
+      - "Retail/Sales/column/Quantity"
+      - "Retail/Sales/column/UnitPrice"
+      - "Retail/Sales/column/Amount"
+      - "Retail/Sales/column/Cost"
+  - id: hide-foreign-keys
+    fixture: retail-issues
+    rule: hide-foreign-keys
+    objects:
+      - "Retail/Sales/column/OrderDate"
+      - "Retail/Sales/column/ShipDate"
+      - "Retail/Sales/column/ProductKey"
+      - "Retail/Sales/column/CustomerKey"
+  - id: mark-primary-keys
+    fixture: retail-issues
+    rule: mark-primary-keys
+    objects:
+      - "Retail/Product/column/ProductKey"
+      - "Retail/Customer/column/CustomerKey"
+  - id: unnecessary-hidden-columns
+    fixture: retail-issues
+    rule: unnecessary-hidden-columns
+    objects:
+      - "Retail/Sales/column/LoadBatch"
+      - "Retail/Product/column/LegacyCode"
+  - id: unnecessary-hidden-measures
+    fixture: retail-issues
+    rule: unnecessary-hidden-measures
+    objects:
+      - "Retail/Customer/measure/Old Customer Count"
+  - id: avoid-floating-point
+    fixture: retail-issues
+    rule: avoid-floating-point
+    objects:
+      - "Retail/Sales/column/UnitPrice"
+      - "Retail/Product/column/ListPrice"
+  - id: use-divide-function
+    fixture: retail-issues
+    rule: use-divide-function
+    objects:
+      - "Retail/Sales/measure/Margin %"
+      - "Retail/Sales/measure/Sales YoY %"
+  - id: avoid-iferror
+    fixture: retail-issues
+    rule: avoid-iferror
+    objects:
+      - "Retail/Sales/measure/Sales YoY %"
+  - id: dax-columns-fully-qualified
+    fixture: retail-issues
+    rule: dax-columns-fully-qualified
+    objects:
+      - "Retail/Sales/measure/Units "
+  - id: dax-measures-unqualified
+    fixture: retail-issues
+    rule: dax-measures-unqualified
+    objects:
+      - "Retail/Sales/measure/Profit"
+  - id: measure-direct-reference
+    fixture: retail-issues
+    rule: measure-direct-reference
+    objects:
+      - "Retail/Sales/measure/Revenue"
+  - id: avoid-duplicate-measures
+    fixture: retail-issues
+    rule: avoid-duplicate-measures
+    objects:
+      - "Retail/Sales/measure/Total Sales"
+      - "Retail/Sales/measure/Gross Sales"
+  - id: measure-format-string
+    fixture: retail-issues
+    rule: measure-format-string
+    objects:
+      - "Retail/Sales/measure/Avg Order Value"
+  - id: name-leading-trailing-space
+    fixture: retail-issues
+    rule: name-leading-trailing-space
+    objects:
+      - "Retail/Sales/measure/Units "
+  - id: avoid-bidirectional-relationship
+    fixture: retail-issues
+    rule: avoid-bidirectional-relationship
+    objects:
+      - "Retail/relationship/7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e02"
+  - id: inactive-relationship-unused
+    fixture: retail-issues
+    rule: inactive-relationship-unused
+    objects:
+      - "Retail/relationship/7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e04"
+  - id: auto-date-time-on
+    fixture: retail-issues
+    rule: auto-date-time-on
+    objects:
+      - "Retail"
+  - id: mark-date-table
+    fixture: retail-issues
+    rule: mark-date-table
+    objects:
+      - "Retail/Calendar"
+  - id: model-has-date-table
+    fixture: retail-issues
+    rule: model-has-date-table
+    objects:
+      - "Retail"
+  - id: sort-month-columns
+    fixture: retail-issues
+    rule: sort-month-columns
+    objects:
+      - "Retail/Calendar/column/Month"
+  - id: add-data-category
+    fixture: retail-issues
+    rule: add-data-category
+    objects:
+      - "Retail/Customer/column/City"
+  - id: table-without-relationships
+    fixture: retail-issues
+    rule: table-without-relationships
+    objects:
+      - "Retail/Targets"
+  - id: pq-hardcoded-local-path
+    fixture: retail-issues
+    rule: pq-hardcoded-local-path
+    objects:
+      - "Retail/Sales/partition/Sales"
+      - "Retail/Product/partition/Product"
+      - "Retail/Customer/partition/Customer"
+  - id: pq-untyped-source
+    fixture: retail-issues
+    rule: pq-untyped-source
+    objects:
+      - "Retail/Sales/partition/Sales"
+      - "Retail/Product/partition/Product"
+      - "Retail/Customer/partition/Customer"
+  - id: no-false-avoid-1-minus-x-over-y
+    fixture: retail-issues
+    rule: avoid-1-minus-x-over-y
+    objects: []
+  - id: no-false-use-treatas
+    fixture: retail-issues
+    rule: use-treatas
+    objects: []
+  - id: no-false-no-evaluateandlog
+    fixture: retail-issues
+    rule: no-evaluateandlog
+    objects: []
+  - id: no-false-data-column-needs-source
+    fixture: retail-issues
+    rule: data-column-needs-source
+    objects: []
+  - id: no-false-expression-required
+    fixture: retail-issues
+    rule: expression-required
+    objects: []
+  - id: no-false-relationship-same-data-type
+    fixture: retail-issues
+    rule: relationship-same-data-type
+    objects: []
+  - id: no-false-invalid-name-characters
+    fixture: retail-issues
+    rule: invalid-name-characters
+    objects: []
+  - id: no-false-many-to-many-single-direction
+    fixture: retail-issues
+    rule: many-to-many-single-direction
+    objects: []
+  - id: no-false-calculated-column-uses-related
+    fixture: retail-issues
+    rule: calculated-column-uses-related
+    objects: []
+  - id: no-false-auto-date-tables
+    fixture: retail-issues
+    rule: auto-date-tables
+    objects: []
+  - id: no-false-generic-column-name
+    fixture: retail-issues
+    rule: generic-column-name
+    objects: []

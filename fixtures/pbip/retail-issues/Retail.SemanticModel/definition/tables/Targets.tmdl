@@ -1,0 +1,26 @@
+/// Sales targets by region (not yet related).
+table Targets
+	lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000002b
+
+	/// Sales region.
+	column Region
+		dataType: string
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000029
+		summarizeBy: none
+		sourceColumn: [Region]
+
+	/// Sales target for the region.
+	column Target
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000002a
+		summarizeBy: none
+		sourceColumn: [Target]
+
+	partition Targets = calculated
+		mode: import
+		source = ```
+				DATATABLE("Region", STRING, "Target", CURRENCY, {{"North", 100000}, {"South", 80000}})
+				```
+
+	annotation PBI_ResultType = Table

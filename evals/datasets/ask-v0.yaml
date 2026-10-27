@@ -1,0 +1,29 @@
+# Needs a model. Questions about retail-clean; the answer must cite at least one listed object.
+name: ask-v0
+kind: ask
+fixture: retail-clean
+cases:
+  - id: margin
+    question: Which measure gives our profit margin?
+    must_cite_any: [Retail/Sales/measure/Margin %]
+  - id: yoy
+    question: How is year-over-year sales growth calculated?
+    must_cite_any: [Retail/Sales/measure/Sales YoY %]
+  - id: city
+    question: Where is the customer's city stored?
+    must_cite_any: [Retail/Customer/column/City]
+  - id: aov
+    question: What does average order value mean here?
+    must_cite_any: [Retail/Sales/measure/Avg Order Value]
+  - id: units
+    question: How many units did we sell, which measure should I use?
+    must_cite_any: [Retail/Sales/measure/Units, Retail/Sales/column/Quantity]
+  - id: dates
+    question: Which table should I use for dates and time intelligence?
+    must_cite_any: [Retail/Calendar, Retail/Calendar/column/Date]
+  - id: customers
+    question: How do I count customers?
+    must_cite_any: [Retail/Customer/measure/Customer Count]
+  - id: ship-date
+    question: Can I see sales by the date orders were shipped?
+    must_cite_any: [Retail/Sales/measure/Sales by Ship Date]

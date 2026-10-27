@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block body %}
 <h1>Overview</h1>
-<p class="muted">{{ open_findings }} open findings · <a href="/findings">see all</a></p>
+<p class="muted">{{ open_findings }} open findings · <a href="/findings">see all</a> ·
+  <a href="/check">health-check any model</a></p>
+{% if reviewed.proposed %}<p>Review so far: <b>{{ (100 * reviewed.accepted / reviewed.proposed) | round | int }}%</b> of proposed edits
+  accepted as written, {{ (100 * reviewed.edited / reviewed.proposed) | round | int }}% edited before approval
+  ({{ reviewed.proposed }} reviewed).</p>{% endif %}
 
 <h2>Change sets</h2>
 <table>
@@ -28,7 +32,7 @@
 <table>
   <tr><th>Name</th><th>Kind</th><th>Allows</th><th>Path</th></tr>
   {% for c in connections %}
-  <tr><td>{{ c.name }}</td><td>{{ c.kind }}</td><td>{{ c.capability }}</td><td><code>{{ c.path }}</code></td></tr>
+  <tr><td><a href="/connections/{{ c.id }}">{{ c.name }}</a></td><td>{{ c.kind }}</td><td>{{ c.capability }}</td><td><code>{{ c.path }}</code></td></tr>
   {% else %}<tr><td colspan="4" class="muted">None. Run <code>datawright connect &lt;name&gt; &lt;path&gt;</code>.</td></tr>{% endfor %}
 </table>
 {% endblock %}

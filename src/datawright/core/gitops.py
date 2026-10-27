@@ -27,8 +27,10 @@ def git(
     stdin: bytes | None = None,
     env: dict[str, str] | None = None,
     check: bool = True,
+    as_datawright: bool = True,
 ) -> bytes:
-    full_env = {**os.environ, **IDENTITY, **(env or {})}
+    """Run git in `repo`. Commits are authored by Datawright unless `as_datawright=False`."""
+    full_env = {**os.environ, **(IDENTITY if as_datawright else {}), **(env or {})}
     proc = subprocess.run(
         ["git", "-C", str(repo), *args], input=stdin, capture_output=True, env=full_env
     )
@@ -52,6 +54,18 @@ def is_repo(path: Path) -> bool:
 
 def toplevel(path: Path) -> Path:
     return Path(out(path, "rev-parse", "--show-toplevel"))
+
+
+def project_root(path: Path) -> Path | None:
+    """The Git repository that holds `path`, unless that repository is the user's whole home
+    folder (or a parent of it): an accidental `git init` there must not receive change sets."""
+    if not is_repo(path):
+        return None
+    root = toplevel(path).resolve()
+    home = Path.home().resolve()
+    if root == home or root in home.parents:
+        return None
+    return root
 
 
 def head_sha(repo: Path) -> str:

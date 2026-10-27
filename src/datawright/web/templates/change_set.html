@@ -6,32 +6,54 @@
   {% if cs.run_id %}· from <a href="/runs/{{ cs.run_id }}">run #{{ cs.run_id }}</a>{% endif %}</p>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% if cs.review_comment %}<p><b>Review by {{ cs.reviewed_by }}:</b> {{ cs.review_comment }}</p>{% endif %}
+{% if cs.proposed_count %}<p class="muted">Review: {{ cs.accepted_count }} accepted as proposed ·
+  {{ cs.edited_count }} edited · {{ cs.rejected_count }} rejected (of {{ cs.proposed_count }}).</p>{% endif %}
 {% if cs.branch %}<p>Committed to branch <code>{{ cs.branch }}</code> as <code>{{ cs.commit_sha[:10] }}</code>
   (based on <code>{{ cs.base_sha[:10] }}</code>). Your working tree was not touched; merge the branch when you're ready.
   {% if cs.rollback_sha %}<br>Rolled back in <code>{{ cs.rollback_sha[:10] }}</code>.{% endif %}</p>{% endif %}
 
 {% if cs.status == 'proposed' %}
-<form class="inline" method="post" action="/change-sets/{{ cs.id }}/approve">
-  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="comment" placeholder="Comment (optional)">
-  <button class="primary">Approve</button></form>
+<p>Untick an edit to reject it, or change its text before approving. Nothing is written until you apply.</p>
+<form method="post" action="/change-sets/{{ cs.id }}/approve">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <table>
+    <tr><th>Keep</th><th>Object</th><th>Text (you can edit it)</th></tr>
+    {% set n = namespace(i=0) %}
+    {% for item in cs.items %}{% for i in item.intents %}
+    <tr><td><input type="checkbox" name="keep_{{ n.i }}" checked aria-label="keep this edit"></td>
+      <td><code>{{ i.object_path }}</code><input type="hidden" name="path_{{ n.i }}" value="{{ i.object_path }}"></td>
+      <td><textarea name="value_{{ n.i }}" rows="2" style="width:100%">{{ i.value }}</textarea></td></tr>
+    {% set n.i = n.i + 1 %}
+    {% endfor %}{% endfor %}
+  </table>
+  <p><input type="text" name="comment" placeholder="Comment (optional)">
+  <button class="primary">Approve the kept edits</button></p>
+</form>
 <form class="inline" method="post" action="/change-sets/{{ cs.id }}/reject">
-  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="comment" placeholder="Why? (required)" required>
-  <button>Reject</button></form>
-{% elif cs.status == 'approved' %}
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="comment" placeholder="Why reject all? (required)" required>
+  <button>Reject all</button></form>
+{% else %}
+{% if cs.status == 'approved' %}
 <form class="inline" method="post" action="/change-sets/{{ cs.id }}/apply">
   <input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">Apply as a commit on a new branch</button></form>
 {% elif cs.status == 'applied' %}
 <form class="inline" method="post" action="/change-sets/{{ cs.id }}/rollback">
   <input type="hidden" name="csrf" value="{{ csrf }}"><button>Roll back</button></form>
 {% endif %}
-
 <h2>Edits</h2>
 <table>
-  <tr><th>Object</th><th>Proposed text</th></tr>
+  <tr><th>Object</th><th>Text</th><th>Review</th></tr>
+  {% for f in cs.feedback %}
+  <tr><td><code>{{ f.object_path }}</code></td>
+    <td>{% if f.decision == 'edited' %}<s class="muted">{{ f.proposed }}</s><br>{% endif %}{{ f.final or f.proposed }}</td>
+    <td><span class="pill s-{{ 'applied' if f.decision == 'accepted' else 'proposed' if f.decision == 'edited' else 'rejected' }}">{{ f.decision }}</span></td></tr>
+  {% else %}
   {% for item in cs.items %}{% for i in item.intents %}
-  <tr><td><code>{{ i.object_path or (i.table ~ '/' ~ i.name) }}</code></td><td>{{ i.value }}</td></tr>
+  <tr><td><code>{{ i.object_path }}</code></td><td>{{ i.value }}</td><td></td></tr>
   {% endfor %}{% endfor %}
+  {% endfor %}
 </table>
+{% endif %}
 
 {% for item in cs.items %}
 <h2><code>{{ item.file_path }}</code></h2>

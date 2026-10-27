@@ -7,13 +7,14 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import typer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from datawright.agents.runtime import MessagesClient
-from datawright.config import HOST, Settings
+from datawright.config import HOST, Settings, load_env
 from datawright.db import migrate, session_factory
 from datawright.models import ChangeSet, User
 
@@ -27,11 +28,12 @@ app.add_typer(evals_app, name="evals")
 
 
 @app.callback()
-def _console() -> None:
+def _startup() -> None:
     # Windows consoles default to a legacy code page; never crash on a name we can't print.
     for stream in (sys.stdout, sys.stderr):
         if isinstance(stream, io.TextIOWrapper):
             stream.reconfigure(errors="replace")
+    load_env()
 
 
 @contextmanager
@@ -45,17 +47,17 @@ def opened() -> Iterator[tuple[Settings, Session, User]]:
         yield settings, session, bootstrap(session)
 
 
-def make_client(settings: Settings, offline: bool, limit: int) -> tuple[MessagesClient, str]:
-    from datawright.agents.documenter import offline_script
+def make_client(settings: Settings, offline: bool, script: Any) -> tuple[MessagesClient, str]:
+    """The real Claude client, or a scripted stand-in when `offline`."""
     from datawright.agents.scripted import OFFLINE_MODEL, ScriptedClient
     from datawright.evals.harness import has_credentials
 
     if offline:
-        return ScriptedClient(offline_script(limit)), OFFLINE_MODEL
+        return ScriptedClient(script), OFFLINE_MODEL
     if not has_credentials():
         typer.echo(
-            "No Claude credentials found. Set ANTHROPIC_API_KEY, or add --offline to run "
-            "with scripted drafts instead of Claude.",
+            "No Claude credentials found. Put ANTHROPIC_API_KEY=... in a .env file in this "
+            "folder (or set the environment variable), or add --offline to run without Claude.",
             err=True,
         )
         raise typer.Exit(2)
@@ -69,6 +71,78 @@ def _fail(message: str) -> None:
     raise typer.Exit(1)
 
 
+# ---------------------------------------------------------------- health check (no connection)
+
+
+@app.command()
+def check(
+    path: Path,
+    show_all: bool = typer.Option(False, "--all", help="List every finding, not just a summary."),
+) -> None:
+    """Health-check a PBIP folder or a .pbix file: score, AI-readiness and top problems."""
+    from datawright.connectors.powerbi.health import health
+    from datawright.connectors.powerbi.pbip import open_source
+    from datawright.connectors.powerbi.rules import rule_info
+
+    try:
+        models = open_source(path.resolve()).models()
+    except Exception as e:  # unreadable files must give a message, not a traceback
+        _fail(f"could not read {path}: {e}")
+    if not models:
+        _fail(f"no Power BI model found in {path} (expected a .pbix file or a PBIP folder)")
+    for model in models.values():
+        h = health(model)
+        typer.echo(f"\n{h.model} ({h.source}): health {h.score}/100, grade {h.grade}")
+        typer.echo(f"  {h.tables} tables, {h.columns} columns, {h.measures} measures")
+        typer.echo(
+            f"  AI-readiness {h.ai_readiness}%: {h.documented} of {h.visible} visible "
+            "objects have descriptions"
+        )
+        sev = h.by_severity
+        typer.echo(
+            f"  {sev.get('error', 0)} errors, {sev.get('warning', 0)} warnings, "
+            f"{sev.get('info', 0)} info"
+        )
+        if show_all:
+            for f in h.findings:
+                typer.echo(f"  {f.severity:7} {f.rule:32} {f.message}")
+            continue
+        typer.echo("\n  Top problems:")
+        for rule, n in sorted(h.by_rule.items(), key=lambda x: (_sev_rank(rule_info(x[0])), -x[1]))[
+            :10
+        ]:
+            info = rule_info(rule)
+            example = next(f for f in h.findings if f.rule == rule)
+            title = info.title if info else rule
+            typer.echo(f"  - {title} ({n}): {example.message}")
+        typer.echo("\n  Run with --all for every finding.")
+
+
+def _sev_rank(info: Any) -> int:
+    return {"error": 0, "warning": 1, "info": 2}.get(getattr(info, "severity", ""), 3)
+
+
+# ---------------------------------------------------------------- connections
+
+
+@app.command()
+def track(path: Path, yes: bool = typer.Option(False, "--yes", help="Don't ask.")) -> None:
+    """Start tracking a PBIP folder with Git (needed before Datawright can apply changes)."""
+    from datawright.connectors.powerbi.pbip import find_models
+    from datawright.core import gitops
+    from datawright.services import track as do_track
+
+    path = path.resolve()
+    if path.is_dir() and gitops.project_root(path) is None and find_models(path) and not yes:
+        typer.confirm(
+            f"Create a Git repository in {path} and commit the current files?", abort=True
+        )
+    try:
+        typer.echo(do_track(path))
+    except ValueError as e:
+        _fail(str(e))
+
+
 @app.command()
 def connect(
     name: str,
@@ -77,7 +151,7 @@ def connect(
         "propose", help="read, propose or apply. Apply lets approved change sets be committed."
     ),
 ) -> None:
-    """Connect a Git repository that contains PBIP semantic model folders."""
+    """Connect a PBIP folder in Git (read/propose/apply) or a .pbix file (read only)."""
     from datawright.services import connect as do_connect
 
     with opened() as (_s, session, user):
@@ -85,7 +159,7 @@ def connect(
             conn = do_connect(session, user, name, path.resolve(), capability)
         except ValueError as e:
             _fail(str(e))
-        typer.echo(f"Connected '{conn.name}' ({conn.capability}) -> {conn.path}")
+        typer.echo(f"Connected '{conn.name}' ({conn.kind}, {conn.capability}) -> {conn.path}")
 
 
 @app.command()
@@ -119,25 +193,89 @@ def audit(connection: str) -> None:
 
 
 @app.command()
+def guide(
+    connection: str,
+    out: Path = typer.Option(None, help="Write to this file (default: print)."),
+) -> None:
+    """Write the model guide (data dictionary) as Markdown."""
+    from datawright.connectors.powerbi.guide import render_markdown
+    from datawright.connectors.powerbi.health import health
+    from datawright.services import connector_for, get_connection
+
+    with opened() as (_s, session, _u):
+        try:
+            models = connector_for(get_connection(session, connection)).models()
+        except ValueError as e:
+            _fail(str(e))
+        text = "\n\n".join(render_markdown(m, health(m)) for m in models.values())
+    if out:
+        out.write_text(text, encoding="utf-8")
+        typer.echo(f"Wrote {out}")
+    else:
+        typer.echo(text)
+
+
+# ---------------------------------------------------------------- agents
+
+
+@app.command()
 def document(
     connection: str,
-    limit: int = typer.Option(5, help="Most measures to describe."),
+    limit: int = typer.Option(10, help="Most descriptions to propose."),
+    kinds: str = typer.Option("measure,column,table", help="Which objects to document."),
     offline: bool = typer.Option(False, help="Use scripted drafts instead of Claude."),
 ) -> None:
-    """Have the agent propose descriptions for undocumented measures (as a change set)."""
-    from datawright.agents.documenter import run_documenter
+    """Have the agent propose descriptions for undocumented objects (as a change set)."""
+    from datawright.agents.documenter import offline_script, run_documenter
     from datawright.services import get_connection
 
     with opened() as (settings, session, user):
-        client, label = make_client(settings, offline, limit)
+        client, label = make_client(settings, offline, offline_script(limit))
         try:
             conn = get_connection(session, connection)
             run = run_documenter(
-                session, settings, client, conn, user, limit=limit, model_label=label
+                session,
+                settings,
+                client,
+                conn,
+                user,
+                limit=limit,
+                kinds=[k.strip() for k in kinds.split(",")],
+                model_label=label,
             )
         except ValueError as e:
             _fail(str(e))
         _report_run(session, settings, run.id)
+
+
+@app.command()
+def ask(
+    connection: str,
+    question: str,
+    offline: bool = typer.Option(False, help="Keyword search only, no Claude."),
+) -> None:
+    """Ask a question about a model (what a measure means, where something is defined)."""
+    from datawright.agents.ask import offline_script, run_ask
+    from datawright.services import get_connection
+
+    with opened() as (settings, session, user):
+        client, label = make_client(settings, offline, offline_script)
+        try:
+            run = run_ask(
+                session,
+                settings,
+                client,
+                get_connection(session, connection),
+                user,
+                question,
+                model_label=label,
+            )
+        except ValueError as e:
+            _fail(str(e))
+        if run.final_text:
+            typer.echo(run.final_text)
+        if run.status != "succeeded":
+            _fail(run.error or run.status)
 
 
 def _report_run(session: Session, settings: Settings, run_id: int) -> None:
@@ -164,17 +302,17 @@ def _report_run(session: Session, settings: Settings, run_id: int) -> None:
 @app.command()
 def demo(
     offline: bool = typer.Option(False, help="Use scripted drafts instead of Claude."),
-    limit: int = typer.Option(3, help="Most measures to describe."),
+    limit: int = typer.Option(5, help="Most descriptions to propose."),
 ) -> None:
-    """Copy the retail-issues fixture into a fresh Git repo and run connect, audit, document."""
-    from datawright.agents.documenter import run_documenter
+    """Copy the retail-issues sample into a fresh Git repo and run connect, audit, document."""
+    from datawright.agents.documenter import offline_script, run_documenter
     from datawright.fixtures import make_fixture_repo
     from datawright.services import audit as do_audit
     from datawright.services import connect as do_connect
     from datawright.services import crawl as do_crawl
 
     with opened() as (settings, session, user):
-        client, label = make_client(settings, offline, limit)
+        client, label = make_client(settings, offline, offline_script(limit))
         repo = make_fixture_repo(
             "retail-issues", (settings.data_dir / "demo" / "retail-issues").resolve()
         )
@@ -185,7 +323,13 @@ def demo(
         typer.echo(f"Audit: {len(findings)} findings.")
         run = run_documenter(session, settings, client, conn, user, limit=limit, model_label=label)
         _report_run(session, settings, run.id)
-        typer.echo("Next: run `datawright serve`, open the change set, approve it, then apply it.")
+        typer.echo(
+            "Next: run `datawright serve`, open the change set, review each edit, approve, "
+            "then apply."
+        )
+
+
+# ---------------------------------------------------------------- servers
 
 
 @app.command()
@@ -205,9 +349,17 @@ def serve(port: int = typer.Option(0, help="Port (default from DATAWRIGHT_PORT o
     uvicorn.run(app_, host=HOST, port=settings.port, log_level="warning")
 
 
+@app.command()
+def mcp() -> None:
+    """Run the Datawright MCP server on stdio (for Claude Desktop, Claude Code, VS Code)."""
+    from datawright.mcp_server import build_server
+
+    build_server().run("stdio")
+
+
 @evals_app.command("run")
 def evals_run(
-    set_name: str = typer.Option(..., "--set", help="Eval set name, e.g. audit-rules-v0"),
+    set_name: str = typer.Option(..., "--set", help="Eval set name, e.g. audit-rules-v1"),
     offline: bool = typer.Option(False, help="Use scripted drafts for model sets."),
 ) -> None:
     """Run an eval set, record results, and fail if it falls below its threshold."""
@@ -217,8 +369,8 @@ def evals_run(
         factory = None
         if offline or has_credentials():
 
-            def factory() -> tuple[MessagesClient, str]:
-                return make_client(settings, offline, limit=50)
+            def factory(script: Any) -> tuple[MessagesClient, str]:
+                return make_client(settings, offline, script)
 
         result = run_set(session, settings, set_name, factory, offline)
         if result.skipped:

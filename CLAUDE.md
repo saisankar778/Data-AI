@@ -11,7 +11,7 @@ AI workbench for Power BI teams first. It audits, fixes and documents semantic m
 - Set up: `py -3.11 -m venv .venv` then `.venv/Scripts/python -m pip install -e ".[dev]"`
 - Tests: `.venv/Scripts/python -m pytest`
 - Lint and types: `.venv/Scripts/python -m ruff check . && .venv/Scripts/python -m mypy`
-- Evals: `.venv/Scripts/datawright evals run --set audit-rules-v0`
+- Evals: `.venv/Scripts/datawright evals run --set audit-rules-v1`
 - Demo without an API key: `.venv/Scripts/datawright demo --offline`, then `.venv/Scripts/datawright serve`
 
 ## Non-negotiable rules

@@ -33,5 +33,5 @@ On your own model: `datawright connect mymodel <folder with *.SemanticModel> --c
 ```bash
 .venv/Scripts/python -m pytest
 .venv/Scripts/python -m ruff check . && .venv/Scripts/python -m ruff format --check . && .venv/Scripts/python -m mypy
-.venv/Scripts/datawright evals run --set audit-rules-v0
+.venv/Scripts/datawright evals run --set audit-rules-v1
 ```

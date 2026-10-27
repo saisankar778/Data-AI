@@ -1,35 +1,38 @@
+/// One row per day for time intelligence.
 table Calendar
-	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001d
+	lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000028
 
+	/// Calendar date.
 	column Date
 		dataType: dateTime
 		isKey
 		formatString: Long Date
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001e
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000021
 		summarizeBy: none
-		sourceColumn: Date
+		sourceColumn: [Date]
 
+	/// Calendar year.
 	column Year
 		dataType: int64
 		formatString: 0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000001f
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000022
 		summarizeBy: none
-		sourceColumn: Year
+		sourceColumn: [Year]
 
+	/// Month name, sorted by month number.
 	column Month
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000020
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000023
 		summarizeBy: none
-		sourceColumn: Month
-		sortByColumn: MonthNumber
+		sourceColumn: [Month]
 
+	/// Month number (1-12).
 	column MonthNumber
 		dataType: int64
 		formatString: 0
-		isHidden
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000021
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000024
 		summarizeBy: none
-		sourceColumn: MonthNumber
+		sourceColumn: [MonthNumber]
 
 	partition Calendar = calculated
 		mode: import

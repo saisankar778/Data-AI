@@ -10,3 +10,8 @@ relationship 7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e02
 relationship 7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e03
 	fromColumn: Sales.OrderDate
 	toColumn: Calendar.Date
+
+relationship 7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e04
+	isActive: false
+	fromColumn: Sales.ShipDate
+	toColumn: Calendar.Date

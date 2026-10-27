@@ -121,6 +121,12 @@ class ChangeSet(Base):
     review_comment: Mapped[str | None] = mapped_column(Text)
     reviewed_by: Mapped[str | None] = mapped_column(String(200))
     error: Mapped[str | None] = mapped_column(Text)
+    # Review outcome per proposed edit: {object_path, proposed, final, decision} (trust metrics).
+    feedback: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    proposed_count: Mapped[int] = mapped_column(Integer, default=0)
+    accepted_count: Mapped[int] = mapped_column(Integer, default=0)
+    edited_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -147,6 +153,7 @@ class Finding(Base):
     object_path: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(String(20), default="audit")
     rule: Mapped[str] = mapped_column(String(80))
+    category: Mapped[str] = mapped_column(String(40), default="")
     severity: Mapped[str] = mapped_column(String(10))
     message: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="open")

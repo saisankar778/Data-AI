@@ -1,11 +1,18 @@
-"""Eval sets in evals/datasets/<name>.yaml; pass-rate thresholds in evals/thresholds.yaml."""
+"""Eval sets in evals/datasets/<name>.yaml; pass-rate thresholds in evals/thresholds.yaml.
+
+Kinds:
+- audit-rules: deterministic; each case lists the exact findings one rule must produce.
+- describe:    runs the documenter on a fixture and checks each proposed description.
+- ask:         runs the ask agent and checks that the answer cites the expected objects.
+"""
 
 from __future__ import annotations
 
 import os
 import re
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,14 +23,15 @@ from sqlalchemy.orm import Session
 
 from datawright.agents.runtime import MessagesClient
 from datawright.config import EVALS_DIR, FIXTURES_DIR, REPO_ROOT, Settings
-from datawright.connectors.powerbi.pbip import PbipRepoConnector
+from datawright.connectors.powerbi.pbip import open_source
 from datawright.connectors.powerbi.rules import run_rules
 from datawright.core import gitops
 from datawright.db import migrate, session_factory
 from datawright.fixtures import make_fixture_repo
-from datawright.models import ChangeSet, EvalResult
+from datawright.models import ChangeSet, Connection, EvalResult, User
 
 RAW_DAX = re.compile(r"\b[A-Z][A-Z0-9.]{2,}\s*\(")
+ClientFactory = Callable[[Any], tuple[MessagesClient, str]]  # offline script -> (client, label)
 
 
 @dataclass
@@ -64,37 +72,44 @@ def threshold_for(name: str) -> float:
 
 
 def has_credentials() -> bool:
-    if any(
-        os.environ.get(k)
-        for k in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE")
-    ):
+    keys = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE")
+    if any(os.environ.get(k) for k in keys):
         return True
     return (Path.home() / ".config" / "anthropic").is_dir()
 
 
 def _audit_rules(spec: dict[str, Any]) -> list[CaseResult]:
+    found_by_fixture: dict[str, set[tuple[str, str]]] = {}
     out = []
     for case in spec["cases"]:
-        connector = PbipRepoConnector(FIXTURES_DIR / "pbip" / case["fixture"])
-        found = {(f.rule, f.object_path) for f in run_rules(connector.models().values())}
-        expected = {(e["rule"], e["object"]) for e in case.get("expect") or []}
+        fixture = case["fixture"]
+        if fixture not in found_by_fixture:
+            models = open_source(FIXTURES_DIR / "pbip" / fixture).models().values()
+            found_by_fixture[fixture] = {(f.rule, f.object_path) for f in run_rules(models)}
+        found = found_by_fixture[fixture]
+        if "rule" in case:
+            found = {f for f in found if f[0] == case["rule"]}
+            expected = {(case["rule"], o) for o in case.get("objects") or []}
+        else:
+            expected = set()
         missing, extra = sorted(expected - found), sorted(found - expected)
-        detail = "; ".join([f"missing {m}" for m in missing] + [f"unexpected {x}" for x in extra])
+        detail = "; ".join(
+            [f"missing {m[1]}" for m in missing] + [f"unexpected {x}" for x in extra]
+        )
         out.append(CaseResult(case["id"], not missing and not extra, detail))
     return out
 
 
-def _describe(
-    spec: dict[str, Any], settings: Settings, client: MessagesClient, model_label: str
-) -> list[CaseResult]:
-    # Imported here: the documenter pulls in the agent stack, which the rule evals don't need.
-    from datawright.agents.documenter import run_documenter
+@contextmanager
+def _fixture_workspace(
+    fixture: str, settings: Settings
+) -> Iterator[tuple[Session, User, Connection, Settings]]:
+    """A throwaway Git repo, database and connection for one model-based eval run."""
     from datawright.services import audit, bootstrap, connect
 
-    cases = spec["cases"]
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        repo = make_fixture_repo(spec["fixture"], tmp_path / "repo")
+        repo = make_fixture_repo(fixture, tmp_path / "repo")
         run_settings = settings.model_copy(update={"data_dir": tmp_path / "data"})
         run_settings.data_dir.mkdir()
         migrate(run_settings.db_url)
@@ -104,19 +119,35 @@ def _describe(
                 user = bootstrap(s)
                 conn = connect(s, user, "eval", repo, "propose")
                 audit(s, conn)
-                run = run_documenter(
-                    s, run_settings, client, conn, user, limit=len(cases), model_label=model_label
-                )
-                cs = s.scalar(select(ChangeSet).where(ChangeSet.run_id == run.id))
-                proposals = {
-                    i["object_path"]: i["value"]
-                    for item in (cs.items if cs else [])
-                    for i in item.intents
-                }
-                run_error = run.error
+                yield s, user, conn, run_settings
         finally:
-            # Release the SQLite file so the temp folder can be deleted on Windows.
-            sessions.kw["bind"].dispose()
+            sessions.kw["bind"].dispose()  # release the file so Windows can delete the folder
+
+
+def _describe(
+    spec: dict[str, Any], settings: Settings, factory: ClientFactory
+) -> tuple[list[CaseResult], str]:
+    from datawright.agents.documenter import offline_script, run_documenter
+
+    cases = spec["cases"]
+    limit = int(spec.get("limit", len(cases)))
+    client, label = factory(offline_script(limit))
+    with _fixture_workspace(spec["fixture"], settings) as (s, user, conn, run_settings):
+        run = run_documenter(
+            s,
+            run_settings,
+            client,
+            conn,
+            user,
+            limit=limit,
+            kinds=spec.get("kinds", ["measure", "column", "table"]),
+            model_label=label,
+        )
+        cs = s.scalar(select(ChangeSet).where(ChangeSet.run_id == run.id))
+        proposals = {
+            i["object_path"]: i["value"] for item in (cs.items if cs else []) for i in item.intents
+        }
+        run_error = run.error
     out = []
     for case in cases:
         desc = proposals.get(case["object"])
@@ -132,21 +163,43 @@ def _describe(
             if mentions and not any(m.lower() in desc.lower() for m in mentions):
                 problems.append(f"mentions none of {mentions}")
         out.append(CaseResult(case["id"], not problems, "; ".join(problems) or desc or ""))
-    return out
+    return out, label
+
+
+def _ask(
+    spec: dict[str, Any], settings: Settings, factory: ClientFactory
+) -> tuple[list[CaseResult], str]:
+    from datawright.agents.ask import offline_script, run_ask
+
+    client, label = factory(offline_script)
+    out = []
+    with _fixture_workspace(spec["fixture"], settings) as (s, user, conn, run_settings):
+        for case in spec["cases"]:
+            run = run_ask(s, run_settings, client, conn, user, case["question"], model_label=label)
+            answer = run.final_text or ""
+            cited = [o for o in case["must_cite_any"] if o in answer]
+            ok = run.status == "succeeded" and bool(cited)
+            detail = (
+                "cited " + ", ".join(cited)
+                if cited
+                else f"cited none of {case['must_cite_any']} ({run.status}: {answer[:120]!r})"
+            )
+            out.append(CaseResult(case["id"], ok, detail))
+    return out, label
 
 
 def run_set(
     session: Session,
     settings: Settings,
     name: str,
-    client_factory: Callable[[], tuple[MessagesClient, str]] | None,
+    client_factory: ClientFactory | None,
     offline: bool = False,
 ) -> SetResult:
     spec = load_set(name)
     kind = spec["kind"]
     if kind == "audit-rules":
         result = SetResult(name, "rules", threshold_for(name), _audit_rules(spec))
-    elif kind == "describe":
+    elif kind in ("describe", "ask"):
         if client_factory is None:
             return SetResult(
                 name,
@@ -154,10 +207,9 @@ def run_set(
                 threshold_for(name),
                 skipped="needs Claude credentials (or run with --offline)",
             )
-        client, label = client_factory()
-        result = SetResult(
-            name, label, threshold_for(name), _describe(spec, settings, client, label)
-        )
+        runner = _describe if kind == "describe" else _ask
+        cases, label = runner(spec, settings, client_factory)
+        result = SetResult(name, label, threshold_for(name), cases)
     else:
         raise ValueError(f"unknown eval kind {kind!r}")
     sha = None

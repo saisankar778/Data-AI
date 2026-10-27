@@ -32,7 +32,11 @@
   .add { background:var(--add); color:var(--add-fg); } .del { background:var(--del); color:var(--del-fg); }
   .hunk { color:var(--muted); }
   form.inline { display:inline-flex; gap:8px; align-items:center; margin:4px 12px 4px 0; }
-  input[type=text] { padding:6px 8px; border:1px solid var(--line); background:var(--card); color:var(--fg); min-width:260px; }
+  input[type=text], textarea { padding:6px 8px; border:1px solid var(--line); background:var(--card); color:var(--fg); min-width:260px; font:inherit; }
+  .cards { display:flex; gap:12px; flex-wrap:wrap; margin:8px 0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); padding:12px 16px; min-width:180px; }
+  .big { font-size:24px; font-weight:600; }
+  @media print { header, form, button { display:none; } body { background:#fff; color:#000; } }
   button { padding:6px 14px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; border-radius:4px; }
   button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
   .error { border:1px solid #c24a4a; padding:8px 12px; margin:12px 0; }
@@ -40,7 +44,7 @@
 </style>
 </head>
 <body>
-<header><b>Datawright</b><a href="/">Overview</a><a href="/findings">Findings</a>
+<header><b>Datawright</b><a href="/">Overview</a><a href="/check">Health check</a><a href="/findings">Findings</a>
   <span class="muted" style="margin-left:auto">local · 127.0.0.1</span></header>
 <main>{% block body %}{% endblock %}</main>
 </body>

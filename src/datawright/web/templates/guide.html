@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Model guide · {{ conn.name }}{% endblock %}
+{% block body %}
+{% for m, h in guides %}
+<h1>Model guide: {{ m.name }}</h1>
+<p class="muted">{{ h.tables }} tables, {{ h.columns }} columns, {{ h.measures }} measures · health {{ h.score }}/100 ·
+  {{ h.ai_readiness }}% of visible objects documented · <a href="#" onclick="window.print();return false">Print or save as PDF</a></p>
+{% for t in m.tables.values() | sort(attribute='name') if not t.is_auto_date %}
+<h2>{{ t.name }}{% if t.is_hidden %} <span class="muted">(hidden)</span>{% endif %}</h2>
+<p>{{ t.description or '' }}{% if not t.description %}<span class="muted">No description yet.</span>{% endif %}</p>
+{% if t.measures %}
+<table><tr><th>Measure</th><th>Description</th><th>Format</th></tr>
+{% for x in t.measures | sort(attribute='name') %}
+<tr><td>{{ x.name }}{% if x.is_hidden %} <span class="muted">(hidden)</span>{% endif %}</td>
+  <td>{{ x.description or '—' }}</td><td><code>{{ x.format_string or '—' }}</code></td></tr>
+{% endfor %}</table>
+{% endif %}
+{% if t.columns %}
+<table style="margin-top:8px"><tr><th>Column</th><th>Type</th><th>Description</th></tr>
+{% for c in t.columns %}
+<tr><td>{{ c.name }}{% if c.is_hidden %} <span class="muted">(hidden)</span>{% endif %}{% if c.is_key %} <span class="muted">(key)</span>{% endif %}</td>
+  <td>{{ c.data_type or '?' }}</td><td>{{ c.description or '—' }}</td></tr>
+{% endfor %}</table>
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endblock %}

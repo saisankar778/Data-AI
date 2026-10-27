@@ -1,41 +1,53 @@
+/// Products we sell.
 table Product
-	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000015
+	lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000026
 
 	measure 'Product Count' = DISTINCTCOUNT(Product[ProductKey])
 		formatString: #,0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000016
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000015
 
+	/// Product identifier.
 	column ProductKey
 		dataType: int64
 		formatString: 0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000011
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000016
 		summarizeBy: none
 		sourceColumn: ProductKey
 
+	/// Name of the product.
 	column 'Product Name'
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000012
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000017
 		summarizeBy: none
 		sourceColumn: Product Name
 
+	/// Product category.
 	column Category
 		dataType: string
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000013
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000018
 		summarizeBy: none
 		sourceColumn: Category
 
+	/// Current list price.
 	column ListPrice
 		dataType: double
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000014
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000019
 		summarizeBy: none
 		sourceColumn: ListPrice
+
+	column LegacyCode
+		dataType: string
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000001a
+		summarizeBy: none
+		sourceColumn: LegacyCode
 
 	partition Product = m
 		mode: import
 		source =
 				let
-					Source = Csv.Document(File.Contents("C:\Data\product.csv"), [Delimiter=",", Columns=4, Encoding=65001]),
+					Source = Csv.Document(File.Contents("C:\Data\product.csv"), [Delimiter=",", Columns=5, Encoding=65001]),
 					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true])
 				in
 					Promoted

@@ -13,6 +13,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from datawright.connectors.powerbi.model import (
+    Column,
+    Hierarchy,
+    Measure,
+    Partition,
+    Relationship,
+    SemanticModel,
+    Table,
+)
+
 OBJECT_KEYWORDS = frozenset(
     {
         "alternateOf",
@@ -234,117 +244,145 @@ def parse(text: str) -> TmdlDocument:
 # ---------------------------------------------------------------- semantic model view
 
 
-@dataclass
-class Column:
-    name: str
-    data_type: str | None
-    description: str | None
-    is_hidden: bool
-    summarize_by: str | None
-    properties: dict[str, str]
-
-
-@dataclass
-class Measure:
-    name: str
-    expression: str
-    description: str | None
-    format_string: str | None
-    display_folder: str | None
-
-
-@dataclass
-class Table:
-    name: str
-    file: str  # path relative to the definition folder, forward slashes
-    description: str | None
-    is_hidden: bool
-    columns: list[Column]
-    measures: list[Measure]
-
-    def measure(self, name: str) -> Measure | None:
-        return next((m for m in self.measures if m.name == name), None)
-
-
-@dataclass
-class Relationship:
-    name: str
-    from_column: str | None
-    to_column: str | None
-    cross_filtering: str | None
-    is_active: bool
-
-
-@dataclass
-class SemanticModel:
-    name: str
-    definition_dir: Path
-    tables: dict[str, Table]
-    relationships: list[Relationship]
-
-
-def _table_from(obj: TmdlObject, file: str) -> Table:
-    cols = [
-        Column(
-            name=c.name,
-            data_type=c.properties.get("dataType"),
-            description=c.description,
-            is_hidden=c.properties.get("isHidden", "false") == "true",
-            summarize_by=c.properties.get("summarizeBy"),
-            properties=dict(c.properties),
-        )
-        for c in obj.children
-        if c.kind == "column"
-    ]
-    measures = [
-        Measure(
-            name=m.name,
-            expression=m.expression or "",
-            description=m.description,
-            format_string=m.properties.get("formatString"),
-            display_folder=m.properties.get("displayFolder"),
-        )
-        for m in obj.children
-        if m.kind == "measure"
-    ]
-    return Table(
-        name=obj.name,
-        file=file,
-        description=obj.description,
-        is_hidden=obj.properties.get("isHidden", "false") == "true",
-        columns=cols,
-        measures=measures,
-    )
-
-
 def read_text(path: Path) -> str:
     """Read a TMDL file exactly: no newline translation; a BOM stays as U+FEFF."""
     return path.read_bytes().decode("utf-8")
 
 
+def _flag(obj: TmdlObject, key: str) -> bool:
+    return obj.properties.get(key, "false") == "true"
+
+
+def parse_column_ref(ref: str) -> tuple[str, str]:
+    """`Sales.ProductKey` or `'Sales Table'.'Product Key'` -> (table, column)."""
+    ref = ref.strip()
+    if ref.startswith("'"):
+        table, rest = _parse_name(ref)
+    else:
+        table, dot, rest = ref.partition(".")
+        rest = dot + rest
+    if not table or not rest.startswith("."):
+        raise TmdlError(f"not a column reference: {ref!r}")
+    column = rest[1:].strip()
+    if column.startswith("'"):
+        column, _ = _parse_name(column)
+    if not column:
+        raise TmdlError(f"not a column reference: {ref!r}")
+    return table, column
+
+
+def _column(c: TmdlObject, calculated_table: bool) -> Column:
+    kind = (
+        "calculated"
+        if c.expression is not None
+        else ("calculatedTableColumn" if calculated_table else "data")
+    )
+    return Column(
+        name=c.name,
+        data_type=c.properties.get("dataType"),
+        kind=kind,
+        description=c.description,
+        is_hidden=_flag(c, "isHidden"),
+        is_key=_flag(c, "isKey"),
+        summarize_by=c.properties.get("summarizeBy"),
+        source_column=c.properties.get("sourceColumn"),
+        expression=c.expression,
+        format_string=c.properties.get("formatString"),
+        data_category=c.properties.get("dataCategory"),
+        sort_by_column=c.properties.get("sortByColumn"),
+        display_folder=c.properties.get("displayFolder"),
+    )
+
+
+def _table(obj: TmdlObject, file: str) -> Table:
+    partitions = [
+        Partition(p.name, p.expression, p.properties.get("mode"), p.properties.get("source"))
+        for p in obj.children
+        if p.kind == "partition"
+    ]
+    calculated = any(p.kind == "calculated" for p in partitions)
+    hierarchies = [
+        Hierarchy(
+            h.name,
+            [lv.properties.get("column", lv.name) for lv in h.children if lv.kind == "level"],
+        )
+        for h in obj.children
+        if h.kind == "hierarchy"
+    ]
+    return Table(
+        name=obj.name,
+        file=file,
+        description=obj.description,
+        is_hidden=_flag(obj, "isHidden"),
+        data_category=obj.properties.get("dataCategory"),
+        columns=[_column(c, calculated) for c in obj.children if c.kind == "column"],
+        measures=[
+            Measure(
+                name=m.name,
+                expression=m.expression or "",
+                description=m.description,
+                format_string=m.properties.get("formatString"),
+                display_folder=m.properties.get("displayFolder"),
+                is_hidden=_flag(m, "isHidden"),
+            )
+            for m in obj.children
+            if m.kind == "measure"
+        ],
+        partitions=partitions,
+        hierarchies=hierarchies,
+    )
+
+
+def _relationship(obj: TmdlObject) -> Relationship | None:
+    try:
+        ft, fc = parse_column_ref(obj.properties.get("fromColumn", ""))
+        tt, tc = parse_column_ref(obj.properties.get("toColumn", ""))
+    except TmdlError:
+        return None
+    return Relationship(
+        name=obj.name,
+        from_table=ft,
+        from_column=fc,
+        to_table=tt,
+        to_column=tc,
+        from_cardinality=obj.properties.get("fromCardinality", "many"),
+        to_cardinality=obj.properties.get("toCardinality", "one"),
+        cross_filtering=obj.properties.get("crossFilteringBehavior", "oneDirection"),
+        is_active=obj.properties.get("isActive", "true") != "false",
+    )
+
+
 def load_model(name: str, definition_dir: Path) -> SemanticModel:
     tables: dict[str, Table] = {}
     for path in sorted((definition_dir / "tables").glob("*.tmdl")):
-        doc = parse(read_text(path))
         rel = path.relative_to(definition_dir).as_posix()
-        for obj in doc.objects:
+        for obj in parse(read_text(path)).objects:
             if obj.kind == "table":
-                tables[obj.name] = _table_from(obj, rel)
+                tables[obj.name] = _table(obj, rel)
     relationships: list[Relationship] = []
     rel_path = definition_dir / "relationships.tmdl"
     if rel_path.exists():
         for obj in parse(read_text(rel_path)).objects:
-            if obj.kind == "relationship":
-                relationships.append(
-                    Relationship(
-                        name=obj.name,
-                        from_column=obj.properties.get("fromColumn"),
-                        to_column=obj.properties.get("toColumn"),
-                        cross_filtering=obj.properties.get("crossFilteringBehavior"),
-                        is_active=obj.properties.get("isActive", "true") != "false",
-                    )
-                )
-    return SemanticModel(name, definition_dir, tables, relationships)
+            r = _relationship(obj) if obj.kind == "relationship" else None
+            if r is not None:
+                relationships.append(r)
+    annotations: dict[str, str] = {}
+    model_path = definition_dir / "model.tmdl"
+    if model_path.exists():
+        for obj in parse(read_text(model_path)).objects:
+            nested = obj.children if obj.kind == "model" else [obj]
+            for a in nested:
+                if a.kind == "annotation":
+                    annotations[a.name] = (a.expression or "").strip()
+    expressions: dict[str, str] = {}
+    expr_path = definition_dir / "expressions.tmdl"
+    if expr_path.exists():
+        for obj in parse(read_text(expr_path)).objects:
+            if obj.kind == "expression":
+                expressions[obj.name] = obj.expression or ""
+    return SemanticModel(
+        name, "pbip", tables, relationships, annotations, expressions, definition_dir
+    )
 
 
 # ---------------------------------------------------------------- editing

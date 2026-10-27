@@ -1,27 +1,27 @@
 table Sales
-	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000001
+	lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000025
 
 	/// Total sales amount, before returns.
 	measure 'Total Sales' = SUM(Sales[Amount])
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000002
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000001
 
 	measure 'Total Cost' = SUM(Sales[Cost])
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000003
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000002
 
-	measure Profit = [Total Sales] - [Total Cost]
+	measure Profit = Sales[Total Sales] - [Total Cost]
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000004
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000003
 
 	measure 'Margin %' = [Profit] / [Total Sales]
 		formatString: 0.0%
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000005
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000004
 
 	/// Number of sales order lines.
 	measure 'Order Lines' = COUNTROWS(Sales)
 		formatString: #,0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000006
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000005
 
 	measure 'Sales YoY %' =
 			VAR CurrentSales = [Total Sales]
@@ -30,77 +30,101 @@ table Sales
 				IFERROR((CurrentSales - PriorSales) / PriorSales, BLANK())
 		formatString: 0.0%
 		displayFolder: Growth
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000007
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000006
 
 	measure 'Avg Order Value' = ```
 			DIVIDE([Total Sales], DISTINCTCOUNT(Sales[OrderID]))
 			```
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000007
+
+	measure 'Units ' = SUM([Quantity])
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000008
+
+	measure Revenue = [Total Sales]
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000008
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000009
+
+	measure 'Gross Sales' = SUM(Sales[Amount])
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000000a
 
 	column OrderID
 		dataType: int64
 		formatString: 0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000009
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000000b
 		summarizeBy: none
 		sourceColumn: OrderID
-
-		annotation SummarizationSetBy = Automatic
 
 	column OrderDate
 		dataType: dateTime
 		formatString: Long Date
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000a
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000000c
 		summarizeBy: none
 		sourceColumn: OrderDate
+
+	column ShipDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000000d
+		summarizeBy: none
+		sourceColumn: ShipDate
 
 	column ProductKey
 		dataType: int64
 		formatString: 0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000000e
 		summarizeBy: sum
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000b
 		sourceColumn: ProductKey
 
 	column CustomerKey
 		dataType: int64
 		formatString: 0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-00000000000f
 		summarizeBy: sum
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000c
 		sourceColumn: CustomerKey
 
 	column Quantity
 		dataType: int64
 		formatString: #,0
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000d
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000010
 		summarizeBy: sum
 		sourceColumn: Quantity
 
 	column UnitPrice
 		dataType: double
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000e
-		summarizeBy: none
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000011
+		summarizeBy: sum
 		sourceColumn: UnitPrice
 
 	column Amount
 		dataType: decimal
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000f
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000012
 		summarizeBy: sum
 		sourceColumn: Amount
 
 	column Cost
 		dataType: decimal
 		formatString: #,0.00
-		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000010
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000013
 		summarizeBy: sum
 		sourceColumn: Cost
+
+	column LoadBatch
+		dataType: int64
+		formatString: 0
+		isHidden
+		lineageTag: 6c1f0a3e-2b4d-4e5f-9b01-000000000014
+		summarizeBy: none
+		sourceColumn: LoadBatch
 
 	partition Sales = m
 		mode: import
 		source =
 				let
-					Source = Csv.Document(File.Contents("C:\Data\sales.csv"), [Delimiter=",", Columns=8, Encoding=65001]),
+					Source = Csv.Document(File.Contents("C:\Data\sales.csv"), [Delimiter=",", Columns=10, Encoding=65001]),
 					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true])
 				in
 					Promoted
