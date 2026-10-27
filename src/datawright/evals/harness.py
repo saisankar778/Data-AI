@@ -100,6 +100,25 @@ def _audit_rules(spec: dict[str, Any]) -> list[CaseResult]:
     return out
 
 
+def _diagnose(spec: dict[str, Any]) -> list[CaseResult]:
+    from datawright.connectors.powerbi.refresh import diagnose
+
+    out = []
+    for case in spec["cases"]:
+        models = list(open_source(FIXTURES_DIR / "pbip" / case["fixture"]).models().values())
+        found = diagnose(case["error"], models)
+        match = next((d for d in found if d.pattern == case["pattern"]), None)
+        if match is None:
+            got = [d.pattern for d in found]
+            out.append(CaseResult(case["id"], False, f"expected {case['pattern']}, got {got}"))
+            continue
+        paths = {e.object_path for e in match.evidence}
+        missing = [o for o in case.get("evidence") or [] if o not in paths]
+        detail = f"missing evidence {missing}" if missing else f"{len(paths)} objects"
+        out.append(CaseResult(case["id"], not missing, detail))
+    return out
+
+
 @contextmanager
 def _fixture_workspace(
     fixture: str, settings: Settings
@@ -199,6 +218,8 @@ def run_set(
     kind = spec["kind"]
     if kind == "audit-rules":
         result = SetResult(name, "rules", threshold_for(name), _audit_rules(spec))
+    elif kind == "diagnose":
+        result = SetResult(name, "patterns", threshold_for(name), _diagnose(spec))
     elif kind in ("describe", "ask"):
         if client_factory is None:
             return SetResult(

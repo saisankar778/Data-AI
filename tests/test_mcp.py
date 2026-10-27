@@ -89,6 +89,7 @@ def test_server_registers_no_write_tools(settings: Settings, conn: Connection) -
     assert names == {
         "list_connections", "model_health", "list_findings", "search_model", "get_object",
         "list_undocumented", "propose_description", "submit_for_review", "propose_fixes",
+        "diagnose_refresh_error", "get_query",
     }  # fmt: skip
     assert not any(w in n for n in names for w in ("approve", "apply", "rollback", "delete"))
     assert json.loads(text)["model"] == "Retail"

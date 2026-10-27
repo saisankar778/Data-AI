@@ -193,6 +193,59 @@ def audit(connection: str) -> None:
 
 
 @app.command()
+def diagnose(
+    target: str = typer.Argument(..., help="A connection name, a PBIP folder or a .pbix file."),
+    error: str = typer.Argument("", help="The refresh error text (or use --file)."),
+    file: Path = typer.Option(None, "--file", help="Read the error text from this file."),
+    explain_: bool = typer.Option(
+        False, "--explain", help="Also ask Claude for a tailored explanation (needs the API key)."
+    ),
+) -> None:
+    """Refresh doctor: recognise a refresh error and point at the tables, steps and columns
+    involved in your model, with how to fix it."""
+    from datawright.connectors.powerbi.pbip import open_source
+    from datawright.connectors.powerbi.refresh import diagnose as run_diagnose
+
+    text = file.read_text(encoding="utf-8", errors="replace") if file else error
+    if not text.strip():
+        _fail("give the error text as an argument or with --file")
+    with opened() as (settings, session, user):
+        from datawright.models import Connection
+
+        conn = session.scalar(select(Connection).where(Connection.name == target))
+        try:
+            if conn is not None:
+                from datawright.agents.refresh_doctor import diagnose_connection
+
+                diagnoses = diagnose_connection(conn, text)
+            else:
+                models = list(open_source(Path(target).resolve()).models().values())
+                if not models:
+                    _fail(f"{target} is neither a connection nor a Power BI model")
+                diagnoses = run_diagnose(text, models)
+        except ValueError as e:
+            _fail(str(e))
+        if not diagnoses:
+            typer.echo("No known refresh-error pattern matched. Try --explain for Claude's view.")
+        for d in diagnoses:
+            typer.echo(f"\n{d.title}  [{d.pattern}]")
+            typer.echo(f"  Matched: {d.matched}")
+            typer.echo(f"  Why:     {d.cause}")
+            typer.echo(f"  Fix:     {d.fix}")
+            for ev in d.evidence[:10]:
+                typer.echo(f"  - {ev.object_path}: {ev.note}")
+        if explain_:
+            if conn is None:
+                _fail("--explain needs a connection (run `datawright connect` first)")
+            from datawright.agents.refresh_doctor import explain
+
+            client, label = make_client(settings, False, None)
+            run = explain(session, settings, client, conn, user, text, diagnoses,
+                          model_label=label)  # fmt: skip
+            typer.echo(f"\nClaude:\n{run.final_text or run.error}")
+
+
+@app.command()
 def diff(
     path: Path,
     base: str = typer.Option("HEAD", help="Git revision to compare from."),

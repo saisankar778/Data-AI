@@ -284,6 +284,29 @@ class DatawrightTools:
 
         return self.call("submit_for_review", {"connection": connection}, run)
 
+    def diagnose_refresh_error(self, connection: str, error_text: str) -> list[dict[str, Any]]:
+        def run(session: Session, user: User) -> list[dict[str, Any]]:
+            from dataclasses import asdict
+
+            from datawright.agents.refresh_doctor import diagnose_connection
+
+            return [asdict(d) for d in diagnose_connection(get_connection(session, connection),
+                                                           error_text)]  # fmt: skip
+
+        return self.call(
+            "diagnose_refresh_error",
+            {"connection": connection, "error_text": error_text[:500]},
+            run,
+        )
+
+    def get_query(self, connection: str, object_path: str) -> dict[str, Any]:
+        def run(session: Session, user: User) -> dict[str, Any]:
+            from datawright.agents.refresh_doctor import query_code
+
+            return query_code(connector_for(get_connection(session, connection)), object_path)
+
+        return self.call("get_query", {"connection": connection, "object_path": object_path}, run)
+
     def propose_fixes(self, connection: str, rules: str = "") -> dict[str, Any]:
         def run(session: Session, user: User) -> dict[str, Any]:
             from collections import Counter
@@ -398,5 +421,22 @@ def build_server(settings: Settings | None = None) -> Any:
     )
     def propose_fixes(connection: str, rules: str = "") -> dict[str, Any]:
         return tools.propose_fixes(connection, rules)
+
+    @server.tool(
+        description="Refresh doctor: match a Power BI refresh error against known failure "
+        "patterns and return the cause, the fix and the tables/query steps/relationships in this "
+        "model that are involved. Use get_query to read the M code before explaining.",
+        annotations=read,
+    )
+    def diagnose_refresh_error(connection: str, error_text: str) -> list[dict[str, Any]]:
+        return tools.diagnose_refresh_error(connection, error_text)
+
+    @server.tool(
+        description="Power Query (M) code of a partition (Model/Table/partition/Name) or a shared "
+        "query (Model/expression/Name), split into steps.",
+        annotations=read,
+    )
+    def get_query(connection: str, object_path: str) -> dict[str, Any]:
+        return tools.get_query(connection, object_path)
 
     return server

@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from datawright.agents.refresh_doctor import diagnose_connection
 from datawright.config import HOST, Settings
 from datawright.connectors.powerbi.diff import (
     ModelDiff,
@@ -204,6 +205,34 @@ def create_app(
             request, "change_set.html", cs=cs, findings=findings, error=error,
             preview=change_set_preview(cs),
         )  # fmt: skip
+
+    @app.get("/diagnose", response_class=HTMLResponse)
+    def diagnose_page(request: Request, session: DB) -> HTMLResponse:
+        conns = session.scalars(select(Connection).order_by(Connection.name)).all()
+        return render(request, "diagnose.html", connections=conns, diagnoses=None,
+                      selected=conns[0].name if conns else None)  # fmt: skip
+
+    @app.post("/diagnose", response_class=HTMLResponse)
+    def diagnose_post(
+        request: Request, session: DB, csrf: Annotated[str, Form()] = "",
+        connection: Annotated[str, Form()] = "", error: Annotated[str, Form()] = "",
+    ) -> Response:  # fmt: skip
+        if not secrets.compare_digest(csrf, csrf_token):
+            return PlainTextResponse("Missing or wrong CSRF token", status_code=403)
+        conns = session.scalars(select(Connection).order_by(Connection.name)).all()
+        conn = next((c for c in conns if c.name == connection), None)
+        diagnoses, problem = None, None
+        if conn is None:
+            problem = "Choose a connected model."
+        elif not error.strip():
+            problem = "Paste the error text."
+        else:
+            try:
+                diagnoses = diagnose_connection(conn, error)
+            except Exception as e:  # unreadable model: show it, don't crash
+                problem = f"Could not read the model: {e}"
+        return render(request, "diagnose.html", connections=conns, diagnoses=diagnoses,
+                      selected=connection, error_text=error, problem=problem)  # fmt: skip
 
     @app.get("/findings", response_class=HTMLResponse)
     def findings(request: Request, session: DB) -> HTMLResponse:

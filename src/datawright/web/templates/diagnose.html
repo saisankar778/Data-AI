@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Refresh doctor · Datawright{% endblock %}
+{% block body %}
+<h1>Refresh doctor</h1>
+<p>Paste the error from a failed refresh (Desktop or the Power BI Service). Datawright recognises common failures
+  and shows where they come from in your model. Nothing is changed.</p>
+<form method="post" action="/diagnose">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p><label>Model <select name="connection">
+    {% for c in connections %}<option value="{{ c.name }}" {% if c.name == selected %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+  </select></label></p>
+  <p><textarea name="error" rows="6" style="width:100%" placeholder="DataSource.Error: Could not find file 'C:\Data\sales.csv'.">{{ error_text or '' }}</textarea></p>
+  <button class="primary">Diagnose</button>
+</form>
+{% if not connections %}<p class="muted">Connect a model first: <code>datawright connect &lt;name&gt; &lt;path&gt;</code>.</p>{% endif %}
+{% if problem %}<div class="error">{{ problem }}</div>{% endif %}
+{% if diagnoses is not none %}
+  {% if not diagnoses %}<p>No known refresh-error pattern matched. Try <code>datawright diagnose {{ selected }} "..." --explain</code> for Claude's view.</p>{% endif %}
+  {% for d in diagnoses %}
+  <h2>{{ d.title }} <span class="muted">({{ d.pattern }})</span></h2>
+  <p><b>Matched:</b> <code>{{ d.matched }}</code></p>
+  <p><b>Why:</b> {{ d.cause }}</p>
+  <p><b>Fix:</b> {{ d.fix }}</p>
+  {% if d.evidence %}
+  <table><tr><th>Where in your model</th><th>What</th><th>Code</th></tr>
+  {% for e in d.evidence %}<tr><td><code>{{ e.object_path }}</code></td><td>{{ e.note }}</td><td><code>{{ e.code or '' }}</code></td></tr>{% endfor %}
+  </table>
+  {% endif %}
+  {% endfor %}
+{% endif %}
+{% endblock %}

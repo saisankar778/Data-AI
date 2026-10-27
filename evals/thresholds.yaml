@@ -1,5 +1,6 @@
 # Minimum pass rate per eval set. A merge that drops a set below its threshold is blocked.
-# Together these are PBI-Bench v0 (67 cases).
+# Together these are PBI-Bench v0 (79 cases).
 audit-rules-v1: 1.0
 describe-v1: 0.8
 ask-v0: 0.75
+refresh-doctor-v0: 1.0

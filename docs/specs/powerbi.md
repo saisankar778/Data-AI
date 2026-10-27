@@ -66,6 +66,13 @@ Categories: Performance, DAX, Error prevention, Maintenance, Formatting, Naming,
 - `--out` writes Markdown for a pull-request comment; `--fail-on-break` exits 1 for CI.
 - The change-set page shows the same preview ("What this changes") before approval, and the base-to-commit diff after apply.
 
+## Refresh doctor (`datawright diagnose`)
+
+- A library of 15 refresh-error patterns (connectors/powerbi/refresh.py). Each has a cause, a fix and a *locator* that finds the implicated objects in the user's model: M partitions and steps (parsed into named steps), model columns loaded from a source column, relationships whose "one" side has duplicate or blank keys, sheet/table navigation steps, web hosts, on-premises sources, and unused columns for memory errors.
+- Deterministic and offline. `--explain` (CLI) runs Claude with read-only tools (`search_model`, `get_object`, `list_relationships`, `get_query`), grounded in the deterministic diagnosis.
+- Also available as a UI page (`/diagnose`) and the MCP tools `diagnose_refresh_error` and `get_query`.
+- Eval: `refresh-doctor-v0` (11 deterministic cases: pattern plus evidence objects).
+
 ## Ask (`ask-model`)
 
 - Read-only tools: `search_model`, `get_object`, `list_relationships`.
