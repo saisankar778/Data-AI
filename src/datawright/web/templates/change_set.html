@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Change set #{{ cs.id }} · Datawright{% endblock %}
+{% block body %}
+<h1>Change set #{{ cs.id }} <span class="pill s-{{ cs.status }}">{{ cs.status }}</span></h1>
+<p class="muted">{{ cs.title }} · connection {{ cs.connection.name }}
+  {% if cs.run_id %}· from <a href="/runs/{{ cs.run_id }}">run #{{ cs.run_id }}</a>{% endif %}</p>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if cs.review_comment %}<p><b>Review by {{ cs.reviewed_by }}:</b> {{ cs.review_comment }}</p>{% endif %}
+{% if cs.branch %}<p>Committed to branch <code>{{ cs.branch }}</code> as <code>{{ cs.commit_sha[:10] }}</code>
+  (based on <code>{{ cs.base_sha[:10] }}</code>). Your working tree was not touched; merge the branch when you're ready.
+  {% if cs.rollback_sha %}<br>Rolled back in <code>{{ cs.rollback_sha[:10] }}</code>.{% endif %}</p>{% endif %}
+
+{% if cs.status == 'proposed' %}
+<form class="inline" method="post" action="/change-sets/{{ cs.id }}/approve">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="comment" placeholder="Comment (optional)">
+  <button class="primary">Approve</button></form>
+<form class="inline" method="post" action="/change-sets/{{ cs.id }}/reject">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="text" name="comment" placeholder="Why? (required)" required>
+  <button>Reject</button></form>
+{% elif cs.status == 'approved' %}
+<form class="inline" method="post" action="/change-sets/{{ cs.id }}/apply">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><button class="primary">Apply as a commit on a new branch</button></form>
+{% elif cs.status == 'applied' %}
+<form class="inline" method="post" action="/change-sets/{{ cs.id }}/rollback">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><button>Roll back</button></form>
+{% endif %}
+
+<h2>Edits</h2>
+<table>
+  <tr><th>Object</th><th>Proposed text</th></tr>
+  {% for item in cs.items %}{% for i in item.intents %}
+  <tr><td><code>{{ i.object_path or (i.table ~ '/' ~ i.name) }}</code></td><td>{{ i.value }}</td></tr>
+  {% endfor %}{% endfor %}
+</table>
+
+{% for item in cs.items %}
+<h2><code>{{ item.file_path }}</code></h2>
+<pre class="diff">{% for line in item.diff.splitlines() %}<span class="{{ 'add' if line.startswith('+') and not line.startswith('+++') else 'del' if line.startswith('-') and not line.startswith('---') else 'hunk' if line.startswith('@@') else '' }}">{{ line }}</span>{% endfor %}</pre>
+{% endfor %}
+
+{% if findings %}
+<h2>Findings this fixes</h2>
+<table><tr><th>Rule</th><th>Object</th><th>Status</th></tr>
+{% for f in findings %}<tr><td>{{ f.rule }}</td><td><code>{{ f.object_path }}</code></td>
+  <td><span class="pill s-{{ f.status }}">{{ f.status }}</span></td></tr>{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

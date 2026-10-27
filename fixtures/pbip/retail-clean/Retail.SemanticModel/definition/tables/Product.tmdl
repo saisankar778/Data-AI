@@ -1,0 +1,44 @@
+table Product
+	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000015
+
+	/// Number of distinct products.
+	measure 'Product Count' = DISTINCTCOUNT(Product[ProductKey])
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000016
+
+	column ProductKey
+		dataType: int64
+		formatString: 0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000011
+		summarizeBy: none
+		sourceColumn: ProductKey
+
+	column 'Product Name'
+		dataType: string
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000012
+		summarizeBy: none
+		sourceColumn: Product Name
+
+	column Category
+		dataType: string
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000013
+		summarizeBy: none
+		sourceColumn: Category
+
+	column ListPrice
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000014
+		summarizeBy: none
+		sourceColumn: ListPrice
+
+	partition Product = m
+		mode: import
+		source =
+				let
+					Source = Csv.Document(File.Contents("C:\Data\product.csv"), [Delimiter=",", Columns=4, Encoding=65001]),
+					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true])
+				in
+					Promoted
+
+	annotation PBI_ResultType = Table

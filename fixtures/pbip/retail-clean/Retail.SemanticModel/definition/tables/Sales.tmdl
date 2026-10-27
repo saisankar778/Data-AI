@@ -1,0 +1,115 @@
+table Sales
+	lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000001
+
+	/// Total sales amount in the order currency, before returns.
+	measure 'Total Sales' = SUM(Sales[Amount])
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000002
+
+	/// Total cost of goods sold for the selected orders.
+	measure 'Total Cost' = SUM(Sales[Cost])
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000003
+
+	/// Gross profit: total sales minus total cost.
+	measure Profit = [Total Sales] - [Total Cost]
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000004
+
+	/// Gross margin as a share of total sales.
+	measure 'Margin %' = DIVIDE([Profit], [Total Sales])
+		formatString: 0.0%
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000005
+
+	/// Number of sales order lines.
+	measure 'Order Lines' = COUNTROWS(Sales)
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000006
+
+	/// Change in total sales compared with the same period last year.
+	measure 'Sales YoY %' =
+			VAR CurrentSales = [Total Sales]
+			VAR PriorSales = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Calendar'[Date]))
+			RETURN
+				DIVIDE(CurrentSales - PriorSales, PriorSales)
+		formatString: 0.0%
+		displayFolder: Growth
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000007
+
+	/// Average sales amount per order.
+	measure 'Avg Order Value' = ```
+			DIVIDE([Total Sales], DISTINCTCOUNT(Sales[OrderID]))
+			```
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000008
+
+	column OrderID
+		dataType: int64
+		formatString: 0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000009
+		summarizeBy: none
+		sourceColumn: OrderID
+
+		annotation SummarizationSetBy = Automatic
+
+	column OrderDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000a
+		summarizeBy: none
+		sourceColumn: OrderDate
+
+	column ProductKey
+		dataType: int64
+		formatString: 0
+		isHidden
+		summarizeBy: none
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000b
+		sourceColumn: ProductKey
+
+	column CustomerKey
+		dataType: int64
+		formatString: 0
+		isHidden
+		summarizeBy: none
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000c
+		sourceColumn: CustomerKey
+
+	column Quantity
+		dataType: int64
+		formatString: #,0
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000d
+		summarizeBy: sum
+		sourceColumn: Quantity
+
+	column UnitPrice
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000e
+		summarizeBy: none
+		sourceColumn: UnitPrice
+
+	column Amount
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-00000000000f
+		summarizeBy: sum
+		sourceColumn: Amount
+
+	column Cost
+		dataType: decimal
+		formatString: #,0.00
+		lineageTag: 6c1f0a3e-2b4d-4e5f-8a90-000000000010
+		summarizeBy: sum
+		sourceColumn: Cost
+
+	partition Sales = m
+		mode: import
+		source =
+				let
+					Source = Csv.Document(File.Contents("C:\Data\sales.csv"), [Delimiter=",", Columns=8, Encoding=65001]),
+					Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars=true])
+				in
+					Promoted
+
+	annotation PBI_ResultType = Table

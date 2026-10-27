@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Overview</h1>
+<p class="muted">{{ open_findings }} open findings · <a href="/findings">see all</a></p>
+
+<h2>Change sets</h2>
+<table>
+  <tr><th>#</th><th>Title</th><th>Status</th><th>Edits</th><th>Branch</th></tr>
+  {% for cs in change_sets %}
+  <tr><td><a href="/change-sets/{{ cs.id }}">{{ cs.id }}</a></td><td>{{ cs.title }}</td>
+      <td><span class="pill s-{{ cs.status }}">{{ cs.status }}</span></td>
+      <td>{{ cs.items | map(attribute='intents') | map('length') | sum }}</td>
+      <td><code>{{ cs.branch or '' }}</code></td></tr>
+  {% else %}<tr><td colspan="5" class="muted">None yet. Run <code>datawright document &lt;connection&gt;</code>.</td></tr>{% endfor %}
+</table>
+
+<h2>Agent runs</h2>
+<table>
+  <tr><th>#</th><th>Module</th><th>Status</th><th>Model</th><th>Tokens in / out</th><th>Cost</th></tr>
+  {% for r in runs %}
+  <tr><td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.module }}</td>
+      <td><span class="pill s-{{ r.status }}">{{ r.status }}</span></td><td>{{ r.model }}</td>
+      <td>{{ r.input_tokens }} / {{ r.output_tokens }}</td><td>${{ '%.4f' % r.cost_usd }}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">No runs yet.</td></tr>{% endfor %}
+</table>
+
+<h2>Connections</h2>
+<table>
+  <tr><th>Name</th><th>Kind</th><th>Allows</th><th>Path</th></tr>
+  {% for c in connections %}
+  <tr><td>{{ c.name }}</td><td>{{ c.kind }}</td><td>{{ c.capability }}</td><td><code>{{ c.path }}</code></td></tr>
+  {% else %}<tr><td colspan="4" class="muted">None. Run <code>datawright connect &lt;name&gt; &lt;path&gt;</code>.</td></tr>{% endfor %}
+</table>
+{% endblock %}

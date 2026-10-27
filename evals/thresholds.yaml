@@ -1,0 +1,3 @@
+# Minimum pass rate per eval set. A merge that drops a set below its threshold is blocked.
+audit-rules-v0: 1.0
+describe-v0: 0.8

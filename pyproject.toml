@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "datawright"
+version = "0.0.1"
+description = "AI workbench for Power BI teams: audit, fix and document semantic models through reviewable change sets."
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=2.3",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6", "mypy>=1.11", "types-PyYAML"]
+
+[project.scripts]
+datawright = "datawright.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/datawright"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["src/datawright/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+files = ["src/datawright"]
+python_version = "3.11"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+exclude = ["src/datawright/migrations/"]

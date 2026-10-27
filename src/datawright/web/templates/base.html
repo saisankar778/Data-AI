@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Datawright{% endblock %}</title>
+<style>
+  :root { --bg:#fbfaf8; --fg:#1d1d1b; --muted:#6b6862; --line:#e4e0d8; --card:#fff;
+          --add:#e6f4ea; --add-fg:#1e6b35; --del:#fbeaea; --del-fg:#a12a2a; --accent:#2d5bd7; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161615; --fg:#ecebe8; --muted:#a19d95; --line:#33322f; --card:#1f1f1d;
+            --add:#16301f; --add-fg:#8fd6a5; --del:#3a1c1c; --del-fg:#f0a3a3; --accent:#8aa8ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { border-bottom:1px solid var(--line); padding:12px 24px; display:flex; gap:20px; align-items:baseline; }
+  header b { font-size:17px; }
+  header a { color:var(--muted); text-decoration:none; }
+  main { max-width:1100px; margin:0 auto; padding:24px; }
+  h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:17px; margin:28px 0 8px; }
+  .muted { color:var(--muted); }
+  a { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:14px; }
+  th { color:var(--muted); font-weight:600; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; border:1px solid var(--line); font-size:12px; }
+  .s-proposed,.s-open { border-color:#d9a400; } .s-applied,.s-succeeded,.s-fixed { border-color:#2f9a55; }
+  .s-rejected,.s-failed,.s-refused,.s-rolled_back { border-color:#c24a4a; }
+  pre.diff { background:var(--card); border:1px solid var(--line); padding:10px 0; overflow-x:auto; font-size:13px; }
+  pre.diff span { display:block; padding:0 12px; white-space:pre; }
+  .add { background:var(--add); color:var(--add-fg); } .del { background:var(--del); color:var(--del-fg); }
+  .hunk { color:var(--muted); }
+  form.inline { display:inline-flex; gap:8px; align-items:center; margin:4px 12px 4px 0; }
+  input[type=text] { padding:6px 8px; border:1px solid var(--line); background:var(--card); color:var(--fg); min-width:260px; }
+  button { padding:6px 14px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; border-radius:4px; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .error { border:1px solid #c24a4a; padding:8px 12px; margin:12px 0; }
+  code { font-size:13px; }
+</style>
+</head>
+<body>
+<header><b>Datawright</b><a href="/">Overview</a><a href="/findings">Findings</a>
+  <span class="muted" style="margin-left:auto">local · 127.0.0.1</span></header>
+<main>{% block body %}{% endblock %}</main>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Needs a model. Runs the documenter on retail-issues and checks every proposed description:
+# present, <= 300 chars, no raw DAX, and mentions at least one of the given words.
+# These checks are a floor, not a quality score; Phase 1 adds rubric grading of meaning.
+name: describe-v0
+kind: describe
+fixture: retail-issues
+cases:
+  - {id: total-sales, object: Retail/Sales/measure/Total Sales, must_mention_any: [sales, amount]}
+  - {id: total-cost, object: Retail/Sales/measure/Total Cost, must_mention_any: [cost]}
+  - {id: profit, object: Retail/Sales/measure/Profit, must_mention_any: [profit, sales, cost]}
+  - {id: margin, object: Retail/Sales/measure/Margin %, must_mention_any: [margin, profit]}
+  - {id: sales-yoy, object: Retail/Sales/measure/Sales YoY %, must_mention_any: [year, prior, previous, YoY]}
+  - {id: avg-order-value, object: Retail/Sales/measure/Avg Order Value, must_mention_any: [order]}
+  - {id: product-count, object: Retail/Product/measure/Product Count, must_mention_any: [product]}
+  - {id: customer-count, object: Retail/Customer/measure/Customer Count, must_mention_any: [customer]}

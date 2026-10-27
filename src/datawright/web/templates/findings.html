@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Findings · Datawright{% endblock %}
+{% block body %}
+<h1>Findings</h1>
+<table>
+  <tr><th>Status</th><th>Severity</th><th>Rule</th><th>Object</th><th>Message</th></tr>
+  {% for f in findings %}
+  <tr><td><span class="pill s-{{ f.status }}">{{ f.status }}</span></td><td>{{ f.severity }}</td>
+      <td>{{ f.rule }}</td><td><code>{{ f.object_path }}</code></td><td>{{ f.message }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">No findings. Run <code>datawright audit &lt;connection&gt;</code>.</td></tr>{% endfor %}
+</table>
+{% endblock %}

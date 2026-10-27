@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Run #{{ run.id }} · Datawright{% endblock %}
+{% block body %}
+<h1>Run #{{ run.id }} · {{ run.module }} <span class="pill s-{{ run.status }}">{{ run.status }}</span></h1>
+<p class="muted">Model {{ run.model }} · permission {{ run.permission }} ·
+  {{ run.input_tokens }} in / {{ run.output_tokens }} out tokens ({{ run.cache_read_tokens }} cached) ·
+  ${{ '%.4f' % run.cost_usd }}</p>
+<p><b>Task:</b> {{ run.prompt }}</p>
+{% if run.error %}<div class="error">{{ run.error }}</div>{% endif %}
+{% if run.final_text %}<p><b>Agent summary:</b> {{ run.final_text }}</p>{% endif %}
+{% for cs in change_sets %}<p>Change set <a href="/change-sets/{{ cs.id }}">#{{ cs.id }}</a>
+  <span class="pill s-{{ cs.status }}">{{ cs.status }}</span></p>{% endfor %}
+
+<h2>Steps</h2>
+<table>
+  <tr><th>#</th><th>Kind</th><th>Tool</th><th>Input</th><th>Result</th><th>ms</th></tr>
+  {% for s in run.steps %}
+  <tr><td>{{ s.seq }}</td><td>{{ s.kind }}</td><td>{{ s.tool or '' }}</td>
+      <td><code>{{ s.input | tojson if s.input else '' }}</code></td>
+      <td>{% if s.is_error %}<span class="pill s-failed">error</span> {% endif %}{{ s.output_summary }}</td>
+      <td>{{ s.duration_ms }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,12 @@
+relationship 7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e01
+	fromColumn: Sales.ProductKey
+	toColumn: Product.ProductKey
+
+relationship 7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e02
+	crossFilteringBehavior: bothDirections
+	fromColumn: Sales.CustomerKey
+	toColumn: Customer.CustomerKey
+
+relationship 7d1e0b2a-5c44-4f6e-8a10-1a2b3c4d5e03
+	fromColumn: Sales.OrderDate
+	toColumn: Calendar.Date
