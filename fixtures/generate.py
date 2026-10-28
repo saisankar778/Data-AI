@@ -454,6 +454,7 @@ def build(clean: bool) -> dict[str, str]:
 
 
 SCHEMA = "https://developer.microsoft.com/json-schemas/fabric/item/report/definition"
+BASE_THEME = "Fluent2-CY26SU10"  # built into Desktop 2.159, so no StaticResources files needed
 
 # (page, visual id, visual type, [(role, "Column"|"Measure", table, field), ...])
 # Uses every visible field of retail-clean except measure [Order Lines] and Customer[Segment].
@@ -482,10 +483,10 @@ REPORT_VISUALS = [
 def report_files(
     visuals: list[tuple[str, str, str, list[tuple[str, str, str, str]]]],
 ) -> dict[str, str]:
-    """`Retail.pbip` plus a PBIR report (`Retail.Report`) over the retail model. These are the
-    exact formats Power BI Desktop (Oct 2026) opened successfully on 2026-10-27; keep them unless
-    a newer Desktop proves otherwise. With no visuals it is a blank one-page report, which is
-    enough for Desktop to open the project."""
+    """`Retail.pbip` plus a PBIR report (`Retail.Report`) over the retail model. `report.json`,
+    `pages.json` and `page.json` copy what Power BI Desktop 2.159 (Oct 2026) itself saved on
+    2026-10-28: with a `report.json` that had no `themeCollection`, Desktop silently dropped
+    every page and visual. With no visuals it is a blank one-page report."""
 
     def dump(data: object) -> str:
         return json.dumps(data, indent=2) + "\n"
@@ -506,17 +507,32 @@ def report_files(
         "Retail.Report/definition/version.json": dump(
             {"$schema": f"{SCHEMA}/versionMetadata/1.0.0/schema.json", "version": "2.0.0"}
         ),
-        "Retail.Report/definition/report.json": dump(
-            {"$schema": f"{SCHEMA}/report/1.0.0/schema.json"}
-        ),
+        "Retail.Report/definition/report.json": dump({
+            "$schema": f"{SCHEMA}/report/3.3.0/schema.json",
+            "themeCollection": {"baseTheme": {
+                "name": BASE_THEME,
+                "reportVersionAtImport": {"visual": "2.14.0", "report": "3.4.0", "page": "2.3.1"},
+                "type": "SharedResources",
+            }},
+            "resourcePackages": [{
+                "name": "SharedResources", "type": "SharedResources",
+                "items": [{"name": BASE_THEME, "path": f"BaseThemes/{BASE_THEME}.json",
+                           "type": "BaseTheme"}],
+            }],
+            "settings": {
+                "useStylableVisualContainerHeader": True, "exportDataMode": "AllowSummarized",
+                "defaultDrillFilterOtherVisuals": True, "allowChangeFilterTypes": True,
+                "useEnhancedTooltips": True, "useDefaultAggregateDisplayName": True,
+            },
+        }),
         "Retail.Report/definition/pages/pages.json": dump({
-            "$schema": f"{SCHEMA}/pagesMetadata/1.0.0/schema.json",
+            "$schema": f"{SCHEMA}/pagesMetadata/1.1.0/schema.json",
             "pageOrder": list(pages), "activePageName": first,
         }),
     }  # fmt: skip
     for page, title in pages.items():
         files[f"Retail.Report/definition/pages/{page}/page.json"] = dump({
-            "$schema": f"{SCHEMA}/page/1.0.0/schema.json", "name": page, "displayName": title,
+            "$schema": f"{SCHEMA}/page/2.1.0/schema.json", "name": page, "displayName": title,
             "displayOption": "FitToPage", "height": 720, "width": 1280,
         })  # fmt: skip
     for i, (page, vid, vtype, fields) in enumerate(visuals):

@@ -28,6 +28,9 @@ def test_every_sample_opens_as_a_project(name: str) -> None:
     pages = root / "Retail.Report" / "definition" / "pages"
     order = json.loads((pages / "pages.json").read_text(encoding="utf-8"))["pageOrder"]
     assert order and all((pages / p / "page.json").exists() for p in order)
+    # Without a themeCollection, Desktop 2.159 silently dropped every page and visual.
+    report = json.loads((pages.parent / "report.json").read_text(encoding="utf-8"))
+    assert report["themeCollection"]["baseTheme"]["type"] == "SharedResources"
 
 
 def test_csv_columns_match_what_the_queries_read() -> None:

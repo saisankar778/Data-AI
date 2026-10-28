@@ -28,25 +28,27 @@ Checks: 139 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 
 ## Verified, and not yet verified
 
 - Verified on 2026-10-27 in Power BI Desktop (Oct 2026, on the user's laptop): the hand-written `retail-report` project **opened**, with all four tables listed. Refresh failed only because the sample data didn't exist yet; `datawright sample` now provides it. The report files were then switched to exactly the formats that opened.
+- Verified on 2026-10-28 in Desktop 2.159.883 (Oct 2026): a `datawright sample retail-report` copy **refreshes** (Sales 156 rows, Product 12, Customer 10, Calendar 1,096; Total Sales 3,186,550; Margin 38%) and its **report shows the generated visuals** (KPI card, bar chart, line chart, slicer). The first attempt showed a blank report: with a `report.json` lacking `themeCollection`, Desktop silently dropped all pages and visuals. `report.json`, `pages.json` and `page.json` are now written exactly as Desktop saves them.
+- What Desktop does to TMDL when it saves (seen on 2026-10-28, diff of a sample before/after save): CRLF line endings and a trailing blank line; `compatibilityLevel` 1567 → 1606; property order changes (`lineageTag` before `dataCategory`, `formatString` after `lineageTag`, `isHidden` before `lineageTag`); single-line expressions lose their ``` fences; adds `annotation PBI_ResultType`, `PBI_ProTooling = ["DevMode"]`, `UnderlyingDateTimeDataType = Date`; writes `.platform` files, `diagramLayout.json`, and `.pbi/` (cache.abf, localSettings, editorSettings), plus a `.gitignore`. Our generator's TMDL is still the pre-Desktop form; the editor must keep working on both.
 - **Not yet verified:**
-  1. Refresh of a `datawright sample` copy in Desktop (data should load).
-  2. **Desktop accepting Datawright's own edits.** Run `fix` and `document --offline` on a sample, apply, check out the `datawright/cs-N` branch, then open the project in Desktop. This is the Phase 1 exit check.
-  3. The model evals (`describe-v1`, `ask-v0`) with a real API key.
-  4. A live MCP session from Claude Desktop.
+  1. **Desktop accepting Datawright's own edits.** Run `fix` and `document --offline` on a sample, apply, check out the `datawright/cs-N` branch, then open the project in Desktop. This is the Phase 1 exit check.
+  2. The model evals (`describe-v1`, `ask-v0`) with a real API key.
+  3. A live MCP session from Claude Desktop.
+  4. The Details page visuals (table, map) and the visualContainer schema 1.0.0 we still write (Desktop accepted it on the Overview page).
 
 ## Next steps
 
 **For the person (needs the laptop with Power BI Desktop):**
 
 1. `git pull`, then `.\.venv\Scripts\python -m pip install -e ".[dev]"` (to pick up new commands).
-2. `datawright sample retail-report C:\PowerBI\retail-report`, open `Retail.pbip`, click Refresh. Report back: did data load, and do the visuals show?
-3. Verification 2 above (fix → apply → open in Desktop). Screenshot any error.
+2. Done 2026-10-28: sample refresh and report visuals work.
+3. Verification 1 above (fix → apply → open in Desktop). `C:\PowerBI\retail-issues` is tracked with change set #1 approved (not applied) and #2 proposed. Screenshot any error.
 4. With the API key in `.env`: `datawright evals run --set describe-v1` and `datawright evals run --set ask-v0`.
 5. Phase A interviews (`docs/validation/phase-a.md`): 3 design partners before more features.
 
 **For the AI assistant, in order:**
 
-1. Fix anything verifications 1–2 reveal. Desktop may rewrite TMDL into its own canonical form; if it does, compare and adjust the generator and editor, keeping edits byte-minimal.
+1. Fix anything verification 1 reveals. Desktop does rewrite TMDL into its own form (see above): add tests that run `fix` and `document` edits on a Desktop-saved copy (CRLF, reordered properties, unfenced expressions) and keep edits byte-minimal there too.
 2. **Copilot "Prep data for AI" pack (Phase 1b).** First have the person set AI instructions, a verified answer and synonyms in Desktop on a sample, save, and commit, so the PBIP files show exactly where Desktop stores them. Then generate them as change sets. Don't guess the format.
 3. Model-judge scoring for `describe-v1` (rubric graded by Claude), once a key is available.
 4. Phase 2 (`docs/PLAN.md`): Windows desktop agent with the Power BI Modeling MCP for live DAX; Ask with numbers; Narratives; template-based PBIR page builder (the PBIR visual format in `fixtures/generate.py` is a starting point); billing.
