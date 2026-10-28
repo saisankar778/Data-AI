@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 from pathlib import Path
 
 import pytest
@@ -146,6 +147,34 @@ def test_crlf_and_bom_are_preserved() -> None:
     golden = (GOLDEN / "Sales.total-sales-described.tmdl").read_text(encoding="utf-8")
     assert out == BOM + golden.replace("\n", "\r\n")
     assert "\n" not in out.replace("\r\n", "")
+
+
+def test_edits_on_a_file_power_bi_desktop_saved() -> None:
+    """golden/desktop-saved/Sales.tmdl is a sample as Desktop 2.159 rewrote it (CRLF, its own
+    property order, unfenced single-line measures). Each edit adds or replaces exactly one line."""
+    path = GOLDEN / "desktop-saved" / "Sales.tmdl"
+    before = tmdl.read_text(path)
+    assert before.encode("utf-8") == path.read_bytes()
+    intents = [
+        {"op": "tmdl.set_description", "kind": "column", "name": "OrderDate", "table": "Sales",
+         "value": "Date the order was placed."},
+        {"op": "tmdl.set_property", "kind": "column", "name": "OrderID", "table": "Sales",
+         "key": "isHidden", "value": True},
+        {"op": "tmdl.set_expression", "kind": "measure", "name": "Avg Order Value",
+         "table": "Sales", "value": "DIVIDE([Total Sales], DISTINCTCOUNT(Sales[OrderID]), 0)"},
+    ]  # fmt: skip
+    apply = {"tmdl.set_description": tmdl.apply_set_description,
+             "tmdl.set_property": tmdl.apply_set_property,
+             "tmdl.set_expression": tmdl.apply_set_expression}  # fmt: skip
+    for intent in intents:
+        after = apply[intent["op"]](before, intent)
+        assert tmdl.check_edits(before, after, [intent]) == []
+        assert "\n" not in after.replace("\r\n", "")
+        diff = difflib.unified_diff(
+            before.splitlines(keepends=True), after.splitlines(keepends=True), n=0
+        )
+        changed = [d[0] for d in diff if d[:1] in "+-" and not d.startswith(("+++", "---"))]
+        assert changed in (["+"], ["-", "+"]), intent
 
 
 def test_quoted_names_with_apostrophes() -> None:

@@ -48,7 +48,7 @@ Checks: 139 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 
 
 **For the AI assistant, in order:**
 
-1. Fix anything verification 1 reveals. Desktop does rewrite TMDL into its own form (see above): add tests that run `fix` and `document` edits on a Desktop-saved copy (CRLF, reordered properties, unfenced expressions) and keep edits byte-minimal there too.
+1. Fix anything verification 1 reveals. Done 2026-10-28: description, property and expression edits stay one-line and CRLF-preserving on a file Desktop saved (`tests/golden/desktop-saved/Sales.tmdl`, `test_edits_on_a_file_power_bi_desktop_saved`). Watch: the laptop has global `core.autocrlf=true`, so checking out a `datawright/cs-*` branch turns LF files into CRLF in the working tree (harmless for Desktop, but `git status` may show them modified).
 2. **Copilot "Prep data for AI" pack (Phase 1b).** First have the person set AI instructions, a verified answer and synonyms in Desktop on a sample, save, and commit, so the PBIP files show exactly where Desktop stores them. Then generate them as change sets. Don't guess the format.
 3. Model-judge scoring for `describe-v1` (rubric graded by Claude), once a key is available.
 4. Phase 2 (`docs/PLAN.md`): Windows desktop agent with the Power BI Modeling MCP for live DAX; Ask with numbers; Narratives; template-based PBIR page builder (the PBIR visual format in `fixtures/generate.py` is a starting point); billing.
