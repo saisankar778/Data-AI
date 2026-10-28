@@ -2,6 +2,7 @@
 
 AI workbench for Power BI teams first. It audits, fixes and documents semantic models and makes them AI-ready. Every change it makes is a reviewable change set that a person approves. It runs **locally on the user's Windows machine**. Model files stay on disk, and only model metadata goes to the model provider.
 
+- **Start with `docs/STATUS.md`**: what's built, what's verified, and the next steps in order.
 - Plan: `docs/PLAN.md` (read the sections for the phase and module you're working on).
 - Review that reshaped the plan: `docs/REVIEW.md`.
 - Decisions: `docs/adr/`. Module specs: `docs/specs/`. Write or update the spec before the code.

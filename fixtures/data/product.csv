@@ -1,0 +1,13 @@
+ProductKey,Product Name,Category,ListPrice,LegacyCode
+1,Road Bike,Bikes,42000.00,P-001
+2,Mountain Bike,Bikes,38000.00,P-002
+3,City Bike,Bikes,21000.00,P-003
+4,Helmet,Accessories,2400.00,P-004
+5,Bike Light,Accessories,900.00,P-005
+6,Water Bottle,Accessories,350.00,P-006
+7,Lock,Accessories,1200.00,P-007
+8,Pump,Accessories,1500.00,P-008
+9,Jersey,Clothing,1800.00,P-009
+10,Gloves,Clothing,700.00,P-010
+11,Shorts,Clothing,1600.00,P-011
+12,Socks,Clothing,300.00,P-012

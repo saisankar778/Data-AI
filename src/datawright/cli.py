@@ -457,6 +457,30 @@ def _report_run(session: Session, settings: Settings, run_id: int) -> None:
 
 
 @app.command()
+def sample(
+    name: str = typer.Argument(..., help="retail-clean, retail-issues or retail-report."),
+    dest: Path = typer.Argument(..., help="A new folder to create, e.g. C:\\PowerBI\\retail."),
+    track_: bool = typer.Option(False, "--track", help="Also start a Git repository there."),
+) -> None:
+    """Copy a sample Power BI project (with data) to a folder you can open in Power BI Desktop."""
+    from datawright.fixtures import make_sample
+    from datawright.services import track as do_track
+
+    try:
+        folder = make_sample(name, dest)
+        if track_:
+            typer.echo(do_track(folder))
+    except ValueError as e:
+        _fail(str(e))
+    typer.echo(f"Sample {name} is ready in {folder}")
+    typer.echo(f"  1. Open {folder / 'Retail.pbip'} in Power BI Desktop and click Refresh.")
+    typer.echo(f'  2. Health check: datawright check "{folder}"')
+    if not track_:
+        typer.echo(f"  3. To try fixes and documentation: datawright track \"{folder}\" "
+                   f"then datawright connect {name} \"{folder}\" --capability apply")  # fmt: skip
+
+
+@app.command()
 def demo(
     offline: bool = typer.Option(False, help="Use scripted drafts instead of Claude."),
     limit: int = typer.Option(5, help="Most descriptions to propose."),

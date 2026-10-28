@@ -25,6 +25,7 @@ class ReportUsage:
     """Fields used by one or more reports, with where they're used (for messages)."""
 
     reports: list[str] = field(default_factory=list)
+    visuals: int = 0  # a blank report says nothing about usage
     uses: dict[FieldKey, list[str]] = field(default_factory=lambda: defaultdict(list))
 
     def used(self, table: str, name: str) -> bool:
@@ -40,6 +41,7 @@ class ReportUsage:
 
     def merge(self, other: ReportUsage) -> None:
         self.reports += other.reports
+        self.visuals += other.visuals
         for key, places in other.uses.items():
             for p in places:
                 if p not in self.uses[key]:
@@ -92,6 +94,7 @@ def _legacy_layout(layout: Any, report: str) -> ReportUsage:
     for section in (layout or {}).get("sections", []):
         page = section.get("displayName") or section.get("name") or "page"
         for container in section.get("visualContainers", []):
+            usage.visuals += 1
             config = container.get("config")
             try:
                 cfg = json.loads(config) if isinstance(config, str) else (config or {})
@@ -117,6 +120,7 @@ def _pbir(definition: Path, report: str) -> ReportUsage:
         for table, name in field_refs(page_json):
             usage.add(table, name, f"{report} / {page} / page filter")
         for visual in sorted(page_dir.glob("visuals/*/visual.json")):
+            usage.visuals += 1
             data = _read_json(visual) or {}
             vtype = (data.get("visual") or {}).get("visualType", "visual")
             for table, name in field_refs(data):
@@ -157,7 +161,7 @@ def pbip_report_usage(root: Path, model_names: list[str]) -> dict[str, ReportUsa
             target = model_names[0]
         if target in model_names:
             out.setdefault(target, ReportUsage()).merge(usage)
-    return out
+    return {name: u for name, u in out.items() if u.visuals}
 
 
 def pbix_report_usage(path: Path) -> ReportUsage | None:
@@ -175,7 +179,8 @@ def pbix_report_usage(path: Path) -> ReportUsage | None:
                         target = Path(tmp) / n
                         target.parent.mkdir(parents=True, exist_ok=True)
                         target.write_bytes(z.read(n))
-                    return _pbir(Path(tmp) / "Report" / "definition", path.stem)
+                    usage = _pbir(Path(tmp) / "Report" / "definition", path.stem)
+                    return usage if usage.visuals else None
             if "Report/Layout" not in names:
                 return None
             raw = z.read("Report/Layout")
@@ -185,4 +190,5 @@ def pbix_report_usage(path: Path) -> ReportUsage | None:
         layout = json.loads(raw.decode("utf-16-le").lstrip(chr(0xFEFF)))
     except (UnicodeDecodeError, ValueError):
         return None
-    return _legacy_layout(layout, path.stem)
+    usage = _legacy_layout(layout, path.stem)
+    return usage if usage.visuals else None

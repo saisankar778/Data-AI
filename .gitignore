@@ -8,3 +8,7 @@ __pycache__/
 .env
 dist/
 build/
+
+# Power BI Desktop files created if a fixture is opened directly (use `datawright sample`)
+fixtures/pbip/**/.pbi/
+fixtures/pbip/**/*.abf

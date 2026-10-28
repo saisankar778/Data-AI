@@ -479,14 +479,27 @@ REPORT_VISUALS = [
 ]  # fmt: skip
 
 
-def report_files() -> dict[str, str]:
-    """A PBIR report (Retail.Report) over the retail model."""
+def report_files(
+    visuals: list[tuple[str, str, str, list[tuple[str, str, str, str]]]],
+) -> dict[str, str]:
+    """`Retail.pbip` plus a PBIR report (`Retail.Report`) over the retail model. These are the
+    exact formats Power BI Desktop (Oct 2026) opened successfully on 2026-10-27; keep them unless
+    a newer Desktop proves otherwise. With no visuals it is a blank one-page report, which is
+    enough for Desktop to open the project."""
 
     def dump(data: object) -> str:
         return json.dumps(data, indent=2) + "\n"
 
-    pages = {"overview": "Overview", "details": "Details"}
+    pages = {"overview": "Overview", "details": "Details"} if visuals else {"page1": "Page 1"}
+    first = next(iter(pages))
     files = {
+        "Retail.pbip": dump({
+            "$schema": "https://developer.microsoft.com/json-schemas/fabric/pbip/pbipProperties/"
+                       "1.0.0/schema.json",
+            "version": "1.0",
+            "artifacts": [{"report": {"path": "Retail.Report"}}],
+            "settings": {"enableAutoRecovery": True},
+        }),
         "Retail.Report/definition.pbir": dump(
             {"version": "4.0", "datasetReference": {"byPath": {"path": "../Retail.SemanticModel"}}}
         ),
@@ -496,20 +509,17 @@ def report_files() -> dict[str, str]:
         "Retail.Report/definition/report.json": dump(
             {"$schema": f"{SCHEMA}/report/1.0.0/schema.json"}
         ),
-        "Retail.Report/definition/pages/pages.json": dump(
-            {
-                "$schema": f"{SCHEMA}/pagesMetadata/1.0.0/schema.json",
-                "pageOrder": list(pages),
-                "activePageName": "overview",
-            }
-        ),  # fmt: skip
-    }
+        "Retail.Report/definition/pages/pages.json": dump({
+            "$schema": f"{SCHEMA}/pagesMetadata/1.0.0/schema.json",
+            "pageOrder": list(pages), "activePageName": first,
+        }),
+    }  # fmt: skip
     for page, title in pages.items():
         files[f"Retail.Report/definition/pages/{page}/page.json"] = dump({
             "$schema": f"{SCHEMA}/page/1.0.0/schema.json", "name": page, "displayName": title,
             "displayOption": "FitToPage", "height": 720, "width": 1280,
         })  # fmt: skip
-    for i, (page, vid, vtype, fields) in enumerate(REPORT_VISUALS):
+    for i, (page, vid, vtype, fields) in enumerate(visuals):
         state: dict[str, dict[str, list[object]]] = {}
         for role, kind, table, prop in fields:
             state.setdefault(role, {"projections": []})["projections"].append({
@@ -525,6 +535,49 @@ def report_files() -> dict[str, str]:
     return files
 
 
+CITIES = ["Hyderabad", "Vijayawada", "Guntur", "Visakhapatnam", "Chennai", "Bengaluru"]
+PRODUCTS = [
+    ("Road Bike", "Bikes", 42000), ("Mountain Bike", "Bikes", 38000),
+    ("City Bike", "Bikes", 21000), ("Helmet", "Accessories", 2400),
+    ("Bike Light", "Accessories", 900), ("Water Bottle", "Accessories", 350),
+    ("Lock", "Accessories", 1200), ("Pump", "Accessories", 1500),
+    ("Jersey", "Clothing", 1800), ("Gloves", "Clothing", 700),
+    ("Shorts", "Clothing", 1600), ("Socks", "Clothing", 300),
+]  # fmt: skip
+
+
+def data_files() -> dict[str, str]:
+    """Small deterministic CSVs the retail models load (fixtures/data). The last column of
+    sales.csv and product.csv only exists in retail-issues; retail-clean reads fewer columns."""
+    import datetime as dt
+    import random
+
+    rng = random.Random(7)
+    product = ["ProductKey,Product Name,Category,ListPrice,LegacyCode"]
+    for key, (name, category, price) in enumerate(PRODUCTS, start=1):
+        product.append(f"{key},{name},{category},{price:.2f},P-{key:03d}")
+    customer = ["CustomerKey,Customer Name,City,Segment"]
+    for key in range(1, 11):
+        segment = "Business" if key % 3 == 0 else "Retail"
+        customer.append(f"{key},Customer {key:02d},{CITIES[key % len(CITIES)]},{segment}")
+    sales = ["OrderID,OrderDate,ShipDate,ProductKey,CustomerKey,Quantity,UnitPrice,Amount,Cost,"
+             "LoadBatch"]  # fmt: skip
+    start = dt.date(2024, 1, 1)
+    for order in range(1001, 1081):
+        day = start + dt.timedelta(days=rng.randrange(0, 365 * 3 - 10))
+        ship = day + dt.timedelta(days=rng.randrange(1, 6))
+        customer_key = rng.randrange(1, 11)
+        for _ in range(rng.randrange(1, 4)):
+            pkey = rng.randrange(1, len(PRODUCTS) + 1)
+            qty = rng.randrange(1, 5)
+            price = PRODUCTS[pkey - 1][2]
+            amount = qty * price
+            sales.append(f"{order},{day.isoformat()},{ship.isoformat()},{pkey},{customer_key},"
+                         f"{qty},{price:.2f},{amount:.2f},{amount * 0.62:.2f},1")  # fmt: skip
+    return {"sales.csv": "\n".join(sales) + "\n", "product.csv": "\n".join(product) + "\n",
+            "customer.csv": "\n".join(customer) + "\n"}  # fmt: skip
+
+
 def main() -> None:
     variants = (("retail-clean", True, False), ("retail-issues", False, False),
                 ("retail-report", True, True))  # fmt: skip
@@ -538,12 +591,15 @@ def main() -> None:
         )
         for rel, text in build(clean).items():
             (model_dir / rel).write_text(text, encoding="utf-8", newline="\n")
-        if with_report:
-            for rel, text in report_files().items():
-                target = ROOT / variant / rel
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(text, encoding="utf-8", newline="\n")
-    print(f"fixtures written to {ROOT}")
+        for rel, text in report_files(REPORT_VISUALS if with_report else []).items():
+            target = ROOT / variant / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8", newline="\n")
+    data = ROOT.parent / "data"
+    data.mkdir(exist_ok=True)
+    for name, text in data_files().items():
+        (data / name).write_text(text, encoding="utf-8", newline="\n")
+    print(f"fixtures written to {ROOT} and {data}")
 
 
 if __name__ == "__main__":

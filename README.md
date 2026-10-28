@@ -53,6 +53,15 @@ Open `.env` and set `ANTHROPIC_API_KEY=...`. `.env` is git-ignored, so the key n
 .\.venv\Scripts\datawright serve                                   # review at http://127.0.0.1:8765
 ```
 
+To see a sample in Power BI Desktop, copy it out of the repo first (Desktop writes files when it opens a project, and the repo's copies are test fixtures):
+
+```powershell
+.\.venv\Scripts\datawright sample retail-report C:\PowerBI\retail-report   # also: retail-clean, retail-issues
+# then open C:\PowerBI\retail-report\Retail.pbip in Power BI Desktop and click Refresh
+```
+
+`retail-issues` is deliberately broken: run `check`, `fix` and `diagnose` on its copy to see what Datawright finds.
+
 On your own model:
 
 ```powershell
