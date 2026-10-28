@@ -30,8 +30,10 @@ Checks: 139 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 
 - Verified on 2026-10-27 in Power BI Desktop (Oct 2026, on the user's laptop): the hand-written `retail-report` project **opened**, with all four tables listed. Refresh failed only because the sample data didn't exist yet; `datawright sample` now provides it. The report files were then switched to exactly the formats that opened.
 - Verified on 2026-10-28 in Desktop 2.159.883 (Oct 2026): a `datawright sample retail-report` copy **refreshes** (Sales 156 rows, Product 12, Customer 10, Calendar 1,096; Total Sales 3,186,550; Margin 38%) and its **report shows the generated visuals** (KPI card, bar chart, line chart, slicer). The first attempt showed a blank report: with a `report.json` lacking `themeCollection`, Desktop silently dropped all pages and visuals. `report.json`, `pages.json` and `page.json` are now written exactly as Desktop saves them.
 - What Desktop does to TMDL when it saves (seen on 2026-10-28, diff of a sample before/after save): CRLF line endings and a trailing blank line; `compatibilityLevel` 1567 → 1606; property order changes (`lineageTag` before `dataCategory`, `formatString` after `lineageTag`, `isHidden` before `lineageTag`); single-line expressions lose their ``` fences; adds `annotation PBI_ResultType`, `PBI_ProTooling = ["DevMode"]`, `UnderlyingDateTimeDataType = Date`; writes `.platform` files, `diagramLayout.json`, and `.pbi/` (cache.abf, localSettings, editorSettings), plus a `.gitignore`. Our generator's TMDL is still the pre-Desktop form; the editor must keep working on both.
+- **Phase 1 exit check passed on 2026-10-28** (Desktop 2.159.883): on `C:\PowerBI\retail-issues`, change set #1 (17 fixes) and #2 (10 offline descriptions) were applied as `datawright/cs-1` and `datawright/cs-2`, merged on a test branch, and opened in Desktop. Desktop loaded every edit (descriptions, `DIVIDE` rewrite, hidden foreign keys, key columns, `dataCategory: City`), refreshed all 5 tables without errors (Sales 156 rows, Margin 38%), and changed no files on open.
+- **Found in that check:** two change sets made from the same commit conflict when merged if their edits touch adjacent lines. #1 rewrote `measure 'Margin %'` and #2 added its `///` description on the line above, so a Git merge needed a hand resolution (keep both). Each change set is a separate branch off the same HEAD, so this happens whenever `fix` and `document` touch the same object. Fix idea: base a new change set on the latest unmerged `datawright/cs-*` branch of the connection, or let a person apply several approved sets as one stacked branch.
 - **Not yet verified:**
-  1. **Desktop accepting Datawright's own edits.** Run `fix` and `document --offline` on a sample, apply, check out the `datawright/cs-N` branch, then open the project in Desktop. This is the Phase 1 exit check.
+  1. **Desktop accepting Datawright's own edits.** Done (see above); kept here for the record. Run `fix` and `document --offline` on a sample, apply, check out the `datawright/cs-N` branch, then open the project in Desktop. This is the Phase 1 exit check.
   2. The model evals (`describe-v1`, `ask-v0`) with a real API key.
   3. A live MCP session from Claude Desktop.
   4. The Details page visuals (table, map) and the visualContainer schema 1.0.0 we still write (Desktop accepted it on the Overview page).
@@ -42,17 +44,18 @@ Checks: 139 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 
 
 1. `git pull`, then `.\.venv\Scripts\python -m pip install -e ".[dev]"` (to pick up new commands).
 2. Done 2026-10-28: sample refresh and report visuals work.
-3. Verification 1 above (fix → apply → open in Desktop). `C:\PowerBI\retail-issues` is tracked with change set #1 approved (not applied) and #2 proposed. Screenshot any error.
+3. Done 2026-10-28: fix → apply → open in Desktop passed.
 4. With the API key in `.env`: `datawright evals run --set describe-v1` and `datawright evals run --set ask-v0`.
 5. Phase A interviews (`docs/validation/phase-a.md`): 3 design partners before more features.
 
 **For the AI assistant, in order:**
 
 1. Fix anything verification 1 reveals. Done 2026-10-28: description, property and expression edits stay one-line and CRLF-preserving on a file Desktop saved (`tests/golden/desktop-saved/Sales.tmdl`, `test_edits_on_a_file_power_bi_desktop_saved`). Watch: the laptop has global `core.autocrlf=true`, so checking out a `datawright/cs-*` branch turns LF files into CRLF in the working tree (harmless for Desktop, but `git status` may show them modified).
-2. **Copilot "Prep data for AI" pack (Phase 1b).** First have the person set AI instructions, a verified answer and synonyms in Desktop on a sample, save, and commit, so the PBIP files show exactly where Desktop stores them. Then generate them as change sets. Don't guess the format.
-3. Model-judge scoring for `describe-v1` (rubric graded by Claude), once a key is available.
-4. Phase 2 (`docs/PLAN.md`): Windows desktop agent with the Power BI Modeling MCP for live DAX; Ask with numbers; Narratives; template-based PBIR page builder (the PBIR visual format in `fixtures/generate.py` is a starting point); billing.
-5. Phase 3: cloud workspace (Postgres, sign-in, second-person approval), tenant governance scan, SQL sources.
+2. Stop change sets for the same connection from conflicting (see "Found in that check" above). Write the spec change in `docs/specs` first.
+3. **Copilot "Prep data for AI" pack (Phase 1b).** First have the person set AI instructions, a verified answer and synonyms in Desktop on a sample, save, and commit, so the PBIP files show exactly where Desktop stores them. Then generate them as change sets. Don't guess the format.
+4. Model-judge scoring for `describe-v1` (rubric graded by Claude), once a key is available.
+5. Phase 2 (`docs/PLAN.md`): Windows desktop agent with the Power BI Modeling MCP for live DAX; Ask with numbers; Narratives; template-based PBIR page builder (the PBIR visual format in `fixtures/generate.py` is a starting point); billing.
+6. Phase 3: cloud workspace (Postgres, sign-in, second-person approval), tenant governance scan, SQL sources.
 
 ## Working notes
 
