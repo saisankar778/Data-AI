@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from datawright.connectors.edits import apply_intent, check_item, replay
+from datawright.connectors.edits import CREATES_FILES, apply_intent, check_item, replay
 from datawright.core import audit_log, gitops
 from datawright.core.capabilities import APPROVER_ROLES, Capability
 from datawright.models import ChangeItem, ChangeSet, Connection, Finding, User, utcnow
@@ -40,6 +40,16 @@ def _fb(path: str, proposed: Any, final: Any, decision: str) -> dict[str, Any]:
     return {"object_path": path, "proposed": proposed, "final": final, "decision": decision}
 
 
+def _normalise_value(intent: dict[str, Any]) -> Any:
+    """How a reviewer's edited text is cleaned: one line for descriptions and DAX, but AI
+    instructions are Markdown, so they keep their lines (browsers also send CRLF)."""
+    if intent.get("op") == "copilot.set_instructions":
+        return lambda s: "\n".join(
+            ln.rstrip() for ln in s.replace("\r\n", "\n").split("\n")
+        ).strip()
+    return lambda s: " ".join(s.split())
+
+
 def branch_name(cs: ChangeSet) -> str:
     return f"datawright/cs-{cs.id}"
 
@@ -67,8 +77,11 @@ class ChangeSetService:
         self._require(cs, "draft")
         item = next((i for i in cs.items if i.file_path == file_path), None)
         if item is None:
-            root = Path(cs.connection.path)
-            before = (root / file_path).read_bytes().decode("utf-8")
+            path = Path(cs.connection.path) / file_path
+            if path.exists() or intent.get("op") not in CREATES_FILES:
+                before = path.read_bytes().decode("utf-8")
+            else:
+                before = ""  # a new file (Copilot settings)
             item = ChangeItem(
                 change_set_id=cs.id,
                 file_path=file_path,
@@ -132,14 +145,13 @@ class ChangeSetService:
                     continue
                 final = (
                     d.get("value") if isinstance(proposed, str) else None
-                )  # flags can't be edited
-                if final is not None and " ".join(str(final).split()) != " ".join(
-                    str(proposed or "").split()
-                ):
+                )  # flags and lists can't be edited
+                norm = _normalise_value(intent)
+                if final is not None and norm(str(final)) != norm(str(proposed or "")):
                     keep.append(
                         {
                             **intent,
-                            "value": " ".join(str(final).split()),
+                            "value": norm(str(final)),
                             "proposed_value": proposed,
                         }
                     )
@@ -228,6 +240,8 @@ class ChangeSetService:
         head = gitops.head_sha(repo)
         for item in cs.items:
             at_head = gitops.blob_sha(repo, head, item.file_path)
+            if at_head is None and item.before == "":
+                continue  # a file this change set creates, still absent
             expected = gitops.hash_content(repo, item.file_path, item.before.encode("utf-8"))
             if at_head != expected:
                 raise ConflictError(
@@ -281,6 +295,8 @@ class ChangeSetService:
         """Replay the approved intents onto the files at `tip` and re-run the propose check."""
         for item in cs.items:
             if gitops.blob_sha(repo, tip, item.file_path) is None:
+                if item.before == "":
+                    continue  # still a new file on top of the stack
                 raise ConflictError(f"{item.file_path} is missing on {below.branch}")
             base = gitops.show(repo, tip, item.file_path).decode("utf-8")
             if base == item.before:
@@ -320,11 +336,13 @@ class ChangeSetService:
             expected = gitops.hash_content(repo, item.file_path, item.after.encode("utf-8"))
             if gitops.blob_sha(repo, tip, item.file_path) != expected:
                 raise ConflictError(f"{item.file_path} changed on {cs.branch} after the change set")
+        restore: dict[str, bytes | None] = {}
+        for i in cs.items:
+            base = cs.base_sha or tip
+            created = i.before == "" and gitops.blob_sha(repo, base, i.file_path) is None
+            restore[i.file_path] = None if created else i.before.encode("utf-8")
         commit = gitops.commit_files(
-            repo,
-            tip,
-            {i.file_path: i.before.encode("utf-8") for i in cs.items},
-            f"Roll back Datawright change set #{cs.id}: {cs.title}",
+            repo, tip, restore, f"Roll back Datawright change set #{cs.id}: {cs.title}"
         )
         gitops.update_branch(repo, cs.branch, commit, tip)
         cs.rollback_sha = commit

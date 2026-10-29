@@ -47,6 +47,31 @@ Categories: Performance, DAX, Error prevention, Maintenance, Formatting, Naming,
 - Kinds: measures, columns, tables (visible objects without a description). Tools: `list_objects`, `get_object`, `propose_description`.
 - Output: one change set; one item per TMDL file; validated structurally before `proposed`.
 
+## Copilot "Prep data for AI" pack (`prep-for-ai`, `datawright prep-ai`)
+
+**Format (sources, not guesses).** A PBIP model keeps its Copilot settings in `<Model>.SemanticModel/Copilot/`. The folder layout comes from the Fabric semantic model definition docs; three files have official JSON schemas in `microsoft/json-schemas` (MIT; copies in `tests/data/ms-schemas/`); file names, schema versions and limits were read from Power BI Desktop 2.159's `Microsoft.PowerBI.Packaging.dll` (string table and `const` fields, read without running it).
+
+| File | Content | Datawright |
+|---|---|---|
+| `Copilot/schema.json` | AI data schema: `tables[]` with `columns[]`, `measures[]`, `hierarchies[]`; each entity has `name` (required, ≤512), optional `visibility` (`Auto`/`Visible`/`Hidden`) and `synonyms` (≤1,024 items, each ≤1,024 chars) | writes synonyms |
+| `Copilot/Instructions/instructions.md` | AI instructions, plain Markdown, ≤15,000 characters | writes |
+| `Copilot/examplePrompts.json` | `prompts[]`, ≤500 characters each | writes |
+| `Copilot/settings.json`, `Copilot/version.json`, `Copilot/Instructions/version.json` | settings (`indexingEnabled`) and version markers | never writes |
+| `Copilot/VerifiedAnswers/` | verified answers (visual snapshot packages) | never writes: they need a visual and a sign-in |
+
+Every JSON file starts with its `$schema` URL (`…/semanticModel/copilot/<name>/1.0.0/schema.json`).
+
+**Verified in Desktop 2.159 (2026-10-29):** a project with a `Copilot` folder holding only `schema.json`, `examplePrompts.json` and `Instructions/instructions.md` (no `version.json`) opens without error, Desktop watches the folder for external changes, and a Desktop save keeps the folder byte for byte. **Not yet verified:** that Copilot reads these files. Opening *Prep data for AI* needs a sign-in to a Copilot-enabled account (a work account on Fabric F2+ or Premium). Until that check passes, the CLI and UI label the pack "preview".
+
+**Edits** (change-set intents, like TMDL edits):
+- `copilot.set_synonyms` `{table, kind: table|column|measure, name, synonyms[]}` on `schema.json`: sets that entity's synonyms, creating the file, table or entity entry if needed. An empty list removes the `synonyms` key. Other entities, their order and unknown keys are kept.
+- `copilot.set_instructions` `{value}` on `instructions.md`: replaces the whole text (Markdown, LF endings, final newline).
+- `copilot.set_example_prompts` `{value: [..]}` on `examplePrompts.json`.
+- JSON files are written as UTF-8, 2-space indent, LF, final newline. The structural check re-reads `after`, validates it against the limits above, and requires that only the targeted entity (or file) changed.
+- A change set can create these files: an item may start from a missing file (`before` = ""). Apply then requires the file to still be missing at the base, and rollback deletes it again.
+
+**Agent `prep-for-ai`** (skill `skills/powerbi/prep-for-ai.md`): tools `list_objects`, `get_object`, `get_copilot_settings` (read), `propose_synonyms`, `propose_ai_instructions`, `propose_example_prompts` (propose). Synonyms go to visible measures, tables and columns that users ask about by other names; AI instructions explain business terms, default measures, date logic and what the model does not contain. Metadata only, never data rows. `--offline` uses scripted drafts (plural/singular forms, names without "Total") for demos and tests. The MCP server exposes the same read and propose tools.
+
 ## Review (trust)
 
 - Each edit in a proposed change set can be **accepted**, **rejected** or **edited** before approval. Approval rebuilds the items from the accepted and edited intents, then re-validates.
@@ -96,7 +121,11 @@ Categories: Performance, DAX, Error prevention, Maintenance, Formatting, Naming,
 | `search_model` / `get_object` | Metadata lookup | no |
 | `list_undocumented` | Visible objects without descriptions | no |
 | `propose_description` | Adds an edit to the session's draft change set | proposes only |
+| `get_copilot_settings` | A model's Copilot instructions, prompts, synonyms and vocabulary | no |
+| `propose_synonyms` / `propose_ai_instructions` / `propose_example_prompts` | Copilot pack edits in the session's draft (same checks as the agent) | proposes only |
 | `submit_for_review` | Validates the draft; returns the review URL | proposes only |
+
+Verified 2026-10-29 with a live stdio session (MCP Python SDK 2.3 client → `datawright mcp`): 15 tools listed; a Copilot pack (instructions, 5 prompts, synonyms for 10 objects) proposed and submitted as one change set.
 
 No MCP tool can approve, apply or roll back. Every MCP call is recorded as an AgentStep on a `mcp-session` run.
 

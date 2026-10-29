@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from datawright.connectors.base import AssetRecord
+from datawright.connectors.powerbi import copilot
 from datawright.connectors.powerbi.model import Column, Measure, SemanticModel, Table
 from datawright.connectors.powerbi.report import pbip_report_usage, pbix_report_usage
 from datawright.connectors.powerbi.tmdl import load_model
@@ -79,6 +80,19 @@ class _PowerBIConnector:
         if model.definition_dir is None or table.file is None:
             return None
         return (model.definition_dir / table.file).relative_to(self.root).as_posix()
+
+    def copilot_file(self, model: SemanticModel, name: str) -> str | None:
+        """A Copilot file (e.g. `copilot.SCHEMA_FILE`) relative to the connection root, or None
+        for a read-only `.pbix` model."""
+        if model.definition_dir is None:
+            return None
+        folder = copilot.model_folder(model.definition_dir)
+        return (folder / name).relative_to(self.root).as_posix()
+
+    def copilot_settings(self, model: SemanticModel) -> copilot.CopilotSettings:
+        if model.definition_dir is None:
+            return copilot.CopilotSettings()
+        return copilot.read_settings(copilot.model_folder(model.definition_dir), model.name)
 
     def objects(self) -> list[ObjectRef]:
         out = []

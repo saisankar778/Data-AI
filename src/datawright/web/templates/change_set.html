@@ -24,9 +24,13 @@
     {% for item in cs.items %}{% for i in item.intents %}
     <tr><td><input type="checkbox" name="keep_{{ n.i }}" checked aria-label="keep this edit"></td>
       <td><code>{{ i.object_path }}</code><input type="hidden" name="id_{{ n.i }}" value="{{ i.id or i.object_path }}"></td>
-      <td>{{ 'description' if i.op == 'tmdl.set_description' else 'DAX expression' if i.op == 'tmdl.set_expression' else i.key }}
+      <td>{{ {'tmdl.set_description': 'description', 'tmdl.set_expression': 'DAX expression',
+              'copilot.set_synonyms': 'Copilot synonyms', 'copilot.set_instructions': 'Copilot AI instructions',
+              'copilot.set_example_prompts': 'Copilot example prompts'}.get(i.op, i.key) }}
         {% if i.rule %}<br><span class="muted">fixes {{ i.rule }}</span>{% endif %}</td>
-      <td>{% if i.value is string %}<textarea name="value_{{ n.i }}" rows="2" style="width:100%">{{ i.value }}</textarea>
+      <td>{% if i.value is string %}<textarea name="value_{{ n.i }}" rows="{{ 14 if i.op == 'copilot.set_instructions' else 2 }}" style="width:100%">{{ i.value }}</textarea>
+        {% elif i.synonyms is defined %}{{ i.synonyms | join(', ') }}
+        {% elif i.op == 'copilot.set_example_prompts' %}<ul>{% for p in i.value %}<li>{{ p }}</li>{% endfor %}</ul>
         {% else %}<code>{{ i.label or i.key }}</code>{% endif %}</td></tr>
     {% set n.i = n.i + 1 %}
     {% endfor %}{% endfor %}

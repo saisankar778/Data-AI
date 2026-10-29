@@ -405,6 +405,31 @@ def document(
         _report_run(session, settings, run.id)
 
 
+@app.command("prep-ai")
+def prep_ai(
+    connection: str,
+    limit: int = typer.Option(15, help="Most objects to propose synonyms for."),
+    offline: bool = typer.Option(False, help="Use scripted drafts instead of Claude."),
+) -> None:
+    """Prepare a model for Copilot (preview): propose AI instructions, example prompts and
+    synonyms as a change set."""
+    from datawright.agents.prep_for_ai import offline_script, run_prep
+    from datawright.services import get_connection
+
+    with opened() as (settings, session, user):
+        client, label = make_client(settings, offline, offline_script(limit))
+        try:
+            conn = get_connection(session, connection)
+            run = run_prep(session, settings, client, conn, user, limit=limit, model_label=label)
+        except ValueError as e:
+            _fail(str(e))
+        _report_run(session, settings, run.id)
+        typer.echo(
+            "Preview: the Copilot files follow Microsoft's published schemas and open in Power BI "
+            "Desktop; whether Copilot uses them is checked only with a Copilot-enabled account."
+        )
+
+
 @app.command()
 def ask(
     connection: str,

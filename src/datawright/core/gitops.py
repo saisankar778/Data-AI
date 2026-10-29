@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import subprocess
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 
 IDENTITY = {
@@ -115,12 +116,16 @@ def _mode(repo: Path, rev: str, path: str) -> str:
     return line.split()[0] if line else "100644"
 
 
-def commit_files(repo: Path, parent: str, files: dict[str, bytes], message: str) -> str:
-    """Create a commit = `parent` + `files`, without touching the working tree or real index."""
+def commit_files(repo: Path, parent: str, files: Mapping[str, bytes | None], message: str) -> str:
+    """Create a commit = `parent` + `files` (None removes a file), without touching the working
+    tree or the real index."""
     with tempfile.TemporaryDirectory() as tmp:
         env = {"GIT_INDEX_FILE": str(Path(tmp) / "index")}
         git(repo, "read-tree", parent, env=env)
         for path, content in files.items():
+            if content is None:
+                git(repo, "update-index", "--force-remove", "--", path, env=env)
+                continue
             blob = hash_content(repo, path, content, write=True)
             git(
                 repo,

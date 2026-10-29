@@ -44,7 +44,7 @@ class DocContext:
     connection: Connection
     connector: PowerBIConnector
     service: ChangeSetService
-    run: AgentRun
+    run: AgentRun | None  # None for MCP sessions, which bring their own draft
     limit: int
     kinds: tuple[str, ...]
     change_set: ChangeSet | None = None
@@ -53,7 +53,9 @@ class DocContext:
     def ensure_change_set(self) -> ChangeSet:
         if self.change_set is None:
             self.change_set = self.service.create_draft(
-                self.connection, f"Describe objects in {self.connection.name}", run_id=self.run.id
+                self.connection,
+                f"Describe objects in {self.connection.name}",
+                run_id=self.run.id if self.run else None,
             )
         return self.change_set
 
@@ -175,6 +177,7 @@ def _list_objects(ctx: DocContext, args: dict[str, Any]) -> ToolResult:
             "table": o.table.name,
             "name": o.name,
             "has_description": bool(o.description),
+            "hidden": o.is_hidden,
         }
         for o in refs[:200]
     ]

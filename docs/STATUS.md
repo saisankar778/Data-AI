@@ -19,11 +19,12 @@ Last updated 2026-10-29. Read this first when continuing the work, on any machin
 | Refresh doctor (15 refresh-error patterns located in the model) | `diagnose` (`--explain` uses Claude) | Also a UI page and MCP tool |
 | Report usage (which fields visuals use: PBIR, classic layout, inside `.pbix`) | automatic | Drives the unused-object rules and broken-visual warnings |
 | Review UI (edit-by-edit accept/reject/edit, apply as a Git branch, roll back) | `serve` | http://127.0.0.1:8765 |
-| MCP server for Claude Desktop / Claude Code (read + propose only) | `mcp` | Setup in the README |
+| Copilot "Prep data for AI" pack (preview): AI instructions, example prompts, synonyms | `prep-ai` (`--offline`) | Writes `Copilot/` files in Microsoft's published format; also MCP tools |
+| MCP server for Claude Desktop / Claude Code (read + propose only) | `mcp` | 15 tools; setup in the README |
 | CI gate and PR comment | `examples/github-actions/power-bi-checks.yml` | |
 | Sample projects with data for Power BI Desktop | `sample <name> <folder>` | `retail-clean`, `retail-issues`, `retail-report` |
 
-Checks: 144 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 cases) and `refresh-doctor-v0` (11 cases) pass.
+Checks: 155 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 cases) and `refresh-doctor-v0` (11 cases) pass.
 
 ## Verified, and not yet verified
 
@@ -35,7 +36,8 @@ Checks: 144 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 
 - **Not yet verified:**
   1. **Desktop accepting Datawright's own edits.** Done (see above); kept here for the record. Run `fix` and `document --offline` on a sample, apply, check out the `datawright/cs-N` branch, then open the project in Desktop. This is the Phase 1 exit check.
   2. The model evals (`describe-v1`, `ask-v0`) with a real API key.
-  3. A live MCP session from Claude Desktop.
+  3. A live MCP session from Claude Desktop. Partly done 2026-10-29: a live stdio session from the MCP Python SDK client (the same protocol Claude Desktop speaks) listed all 15 tools and proposed a Copilot pack as change set #3 on `retail-copilot`. Still to do: the same from Claude Desktop's own UI.
+  5. **Copilot pack, read by Copilot.** Format sources: Microsoft's published JSON schemas (`schema.json` with synonyms, `examplePrompts.json`, `settings.json`), the folder layout in the Fabric semantic-model definition docs, and file names, schema versions and limits (instructions ≤15,000 chars, synonyms ≤1,024 per object) read from Desktop 2.159's `Microsoft.PowerBI.Packaging.dll`. Verified 2026-10-29: Desktop opens a project with such a `Copilot/` folder (no `version.json`), watches it for external changes, and keeps it byte for byte when saving; an invalid visibility value did not stop it opening, so Desktop reads the folder lazily. Not verified: that Copilot uses it, because *Prep data for AI* asks for a sign-in (work account on a Copilot-enabled capacity). Verified answers and `version.json` are not written.
   4. Done 2026-10-29: the Details page (product table, Total Sales by City column chart) renders in Desktop with visualContainer schema 1.0.0. The first version used a `map` visual, which Desktop disables by default (File > Options > Security) and shows as an error, so the sample no longer uses maps. Visuals are now laid out per page from the top-left corner.
 
 ## Next steps
@@ -52,7 +54,7 @@ Checks: 144 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 
 
 1. Fix anything verification 1 reveals. Done 2026-10-28: description, property and expression edits stay one-line and CRLF-preserving on a file Desktop saved (`tests/golden/desktop-saved/Sales.tmdl`, `test_edits_on_a_file_power_bi_desktop_saved`). Watch: the laptop has global `core.autocrlf=true`, so checking out a `datawright/cs-*` branch turns LF files into CRLF in the working tree (harmless for Desktop, but `git status` may show them modified).
 2. Done 2026-10-29: change sets for the same connection stack instead of conflicting.
-3. **Copilot "Prep data for AI" pack (Phase 1b). Blocked:** on 2026-10-29 the person's Copilot sign-in failed in Desktop (Copilot needs a work account on a Copilot-enabled capacity: Fabric F2+ or Premium; a personal or free account can't author it). Known from Microsoft Learn: PBIP stores it in a `Copilot/` folder inside the `*.SemanticModel` folder, with `Instructions/instructions.md`, a `version.json` and a `VerifiedAnswers/` folder; the docs don't show the file contents, and older models keep synonyms in the Q&A linguistic schema (LSDL) with a migration prompt. Still capture a real save before generating anything. Don't guess the format.
+3. Done 2026-10-29 as a preview (see verification 5): `prep-ai`, the `prep-for-ai` agent, `copilot.*` edits, MCP tools. Earlier note, kept for history: **Blocked:** on 2026-10-29 the person's Copilot sign-in failed in Desktop (Copilot needs a work account on a Copilot-enabled capacity: Fabric F2+ or Premium; a personal or free account can't author it). Known from Microsoft Learn: PBIP stores it in a `Copilot/` folder inside the `*.SemanticModel` folder, with `Instructions/instructions.md`, a `version.json` and a `VerifiedAnswers/` folder; the docs don't show the file contents, and older models keep synonyms in the Q&A linguistic schema (LSDL) with a migration prompt. With a Copilot-enabled account: run `prep-ai` on a sample, apply, open in Desktop, open *Prep data for AI* and confirm the instructions, prompts and synonyms appear; save and diff the `Copilot/` folder (it shows `version.json` and Desktop's own formatting). Then drop the "preview" label.
 4. Model-judge scoring for `describe-v1` (rubric graded by Claude), once a key is available.
 5. Phase 2 (`docs/PLAN.md`): Windows desktop agent with the Power BI Modeling MCP for live DAX; Ask with numbers; Narratives; template-based PBIR page builder (the PBIR visual format in `fixtures/generate.py` is a starting point); billing.
 6. Phase 3: cloud workspace (Postgres, sign-in, second-person approval), tenant governance scan, SQL sources.

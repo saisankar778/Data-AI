@@ -14,6 +14,7 @@ It runs **locally on your Windows laptop** next to Power BI Desktop. Model files
 | `datawright diagnose <connection> "<refresh error>"` | **Refresh doctor:** recognises 15 common refresh failures (missing file, renamed source column, bad type conversion, duplicate or blank keys, privacy firewall, credentials, gateway, memory, timeout...) and points at the exact table, Power Query step and relationship in your model, with the fix. `--explain` adds Claude's tailored explanation. Also in the UI and MCP |
 | `datawright connect` / `track` | Connect a `.pbix` (read only) or a PBIP folder in Git (read / propose / apply) |
 | `datawright document <connection>` | Claude drafts descriptions for undocumented tables, columns and measures, as a change set for review |
+| `datawright prep-ai <connection>` | **Copilot "Prep data for AI" (preview):** Claude drafts AI instructions, example prompts and synonyms, written to the model's `Copilot/` folder in Microsoft's published format, as a change set for review. Copilot needs a Copilot-enabled work account to use them |
 | `datawright ask <connection> "question"` | Answers questions about the model ("which measure is margin?") and cites the objects it used |
 | `datawright guide <connection>` | A model guide (data dictionary) in Markdown; the UI version prints to PDF |
 | `datawright serve` | Local review UI at http://127.0.0.1:8765: health, findings, change sets, edit-by-edit review, apply, roll back |
@@ -91,6 +92,7 @@ Claude Desktop: add this to `%APPDATA%\Claude\claude_desktop_config.json`, with 
 Claude Code: `claude mcp add datawright -- C:\path\to\Data-AI\.venv\Scripts\datawright.exe mcp`
 
 Then ask, for example, *"Use Datawright to check the health of my sales model and document the undocumented measures."* Claude can read and propose; you approve in the review UI.
+Or: *"Use Datawright to prepare my sales model for Copilot: AI instructions, example prompts and synonyms."*
 
 ## Use it in CI (pull-request checks for Power BI projects)
 

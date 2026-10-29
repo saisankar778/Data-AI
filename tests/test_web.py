@@ -75,6 +75,28 @@ def test_stacked_change_set_says_so(
     assert "merge only this one" in page
 
 
+def test_copilot_edits_review_and_keep_markdown_lines(
+    client: TestClient, session: Session, settings: Settings, user: User, conn: Connection
+) -> None:
+    from datawright.agents.prep_for_ai import offline_script as prep_script
+    from datawright.agents.prep_for_ai import run_prep
+
+    run = run_prep(session, settings, ScriptedClient(prep_script(5)), conn, user)
+    cs = session.scalar(select(ChangeSet).where(ChangeSet.run_id == run.id))
+    assert cs is not None
+    page = client.get(f"/change-sets/{cs.id}").text
+    assert "Copilot synonyms" in page and "Copilot AI instructions" in page
+    assert "Copilot example prompts" in page and "<li>" in page
+    form = form_of(page)
+    n = next(k[6:] for k, v in form.items() if k.startswith("value_") and "Offline draft" in v)
+    form[f"value_{n}"] = "# Notes\r\n\r\n- Sales means [Total Sales].  \r\n- Dates: Calendar.\r\n"
+    assert client.post(f"/change-sets/{cs.id}/approve", data=form).status_code == 200
+    session.expire_all()
+    item = next(i for i in cs.items if i.file_path.endswith("instructions.md"))
+    assert item.after == "# Notes\n\n- Sales means [Total Sales].\n- Dates: Calendar.\n"
+    assert cs.status == "approved" and cs.edited_count == 1
+
+
 def test_pages_render(client: TestClient, cs_id: int, conn: Connection) -> None:
     assert "Overview" in client.get("/").text
     page = client.get(f"/change-sets/{cs_id}").text
