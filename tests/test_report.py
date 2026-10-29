@@ -89,5 +89,5 @@ def test_diff_reports_broken_visuals(tmp_path: Path) -> None:
     sales.write_bytes(text.replace("\tcolumn City\n", "\tcolumn Town\n", 1).encode("utf-8"))
     [d] = diff_revisions(repo, "HEAD", None)
     assert d.broken_visuals == [
-        "column Retail/Customer/column/City is used by Retail / Details / map"
+        "column Retail/Customer/column/City is used by Retail / Details / clusteredColumnChart"
     ]

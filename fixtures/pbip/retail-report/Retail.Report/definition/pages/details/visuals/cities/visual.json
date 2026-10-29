@@ -2,14 +2,14 @@
   "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/1.0.0/schema.json",
   "name": "cities",
   "position": {
-    "x": 680,
-    "y": 280,
-    "z": 5,
+    "x": 360,
+    "y": 40,
+    "z": 1,
     "width": 300,
     "height": 220
   },
   "visual": {
-    "visualType": "map",
+    "visualType": "clusteredColumnChart",
     "query": {
       "queryState": {
         "Category": {
@@ -30,7 +30,7 @@
             }
           ]
         },
-        "Size": {
+        "Y": {
           "projections": [
             {
               "field": {

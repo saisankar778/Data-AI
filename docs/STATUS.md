@@ -36,7 +36,7 @@ Checks: 144 tests, ruff, mypy, and the deterministic evals `audit-rules-v1` (45 
   1. **Desktop accepting Datawright's own edits.** Done (see above); kept here for the record. Run `fix` and `document --offline` on a sample, apply, check out the `datawright/cs-N` branch, then open the project in Desktop. This is the Phase 1 exit check.
   2. The model evals (`describe-v1`, `ask-v0`) with a real API key.
   3. A live MCP session from Claude Desktop.
-  4. The Details page visuals (table, map) and the visualContainer schema 1.0.0 we still write (Desktop accepted it on the Overview page).
+  4. Done 2026-10-29: the Details page (product table, Total Sales by City column chart) renders in Desktop with visualContainer schema 1.0.0. The first version used a `map` visual, which Desktop disables by default (File > Options > Security) and shows as an error, so the sample no longer uses maps. Visuals are now laid out per page from the top-left corner.
 
 ## Next steps
 

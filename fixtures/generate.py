@@ -475,8 +475,9 @@ REPORT_VISUALS = [
         ("Values", "Column", "Product", "ListPrice"),
         ("Values", "Column", "Sales", "UnitPrice"),
         ("Values", "Column", "Customer", "Customer Name")]),
-    ("details", "cities", "map", [
-        ("Category", "Column", "Customer", "City"), ("Size", "Measure", "Sales", "Total Sales")]),
+    # Not a map: Desktop disables map visuals by default (Options > Security) and shows an error.
+    ("details", "cities", "clusteredColumnChart", [
+        ("Category", "Column", "Customer", "City"), ("Y", "Measure", "Sales", "Total Sales")]),
 ]  # fmt: skip
 
 
@@ -535,7 +536,9 @@ def report_files(
             "$schema": f"{SCHEMA}/page/2.1.0/schema.json", "name": page, "displayName": title,
             "displayOption": "FitToPage", "height": 720, "width": 1280,
         })  # fmt: skip
-    for i, (page, vid, vtype, fields) in enumerate(visuals):
+    seen: dict[str, int] = {}
+    for page, vid, vtype, fields in visuals:
+        i = seen[page] = seen.get(page, -1) + 1  # lay out each page from its top-left corner
         state: dict[str, dict[str, list[object]]] = {}
         for role, kind, table, prop in fields:
             state.setdefault(role, {"projections": []})["projections"].append({
