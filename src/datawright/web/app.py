@@ -201,9 +201,14 @@ def create_app(
         findings = session.scalars(
             select(Finding).where(Finding.change_item_id.in_([i.id for i in cs.items]))
         ).all()
+        stacked_on = cs.base_sha and session.scalar(
+            select(ChangeSet).where(
+                ChangeSet.connection_id == cs.connection_id, ChangeSet.commit_sha == cs.base_sha
+            )
+        )
         return render(
             request, "change_set.html", cs=cs, findings=findings, error=error,
-            preview=change_set_preview(cs),
+            preview=change_set_preview(cs), stacked_on=stacked_on or None,
         )  # fmt: skip
 
     @app.get("/diagnose", response_class=HTMLResponse)

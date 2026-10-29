@@ -12,6 +12,7 @@ from datawright.agents.documenter import offline_script, run_documenter
 from datawright.agents.scripted import ScriptedClient
 from datawright.config import FIXTURES_DIR, Settings
 from datawright.core import gitops
+from datawright.core.changesets import ChangeSetService
 from datawright.models import ChangeSet, Connection, User
 from datawright.web.app import create_app
 
@@ -48,6 +49,30 @@ def form_of(html: str) -> dict[str, str]:
     for name, value in re.findall(r'<textarea name="(value_\d+)"[^>]*>([^<]*)</textarea>', html):
         fields[name] = value
     return fields
+
+
+def test_stacked_change_set_says_so(
+    client: TestClient, session: Session, user: User, conn: Connection
+) -> None:
+    svc = ChangeSetService(session, user)
+    sets = []
+    for name in ("Total Sales", "Profit"):
+        cs = svc.create_draft(conn, f"Describe {name}")
+        svc.add_edit(cs, "Retail.SemanticModel/definition/tables/Sales.tmdl", {
+            "op": "tmdl.set_description", "kind": "measure", "table": "Sales", "name": name,
+            "value": f"About {name}.", "object_path": f"Retail/Sales/measure/{name}",
+        })  # fmt: skip
+        assert svc.propose(cs) == []
+        svc.approve(cs)
+        sets.append(cs)
+    for cs in sets:
+        svc.apply(cs)
+    session.commit()
+    first, second = sets
+    assert "Stacked on" not in client.get(f"/change-sets/{first.id}").text
+    page = client.get(f"/change-sets/{second.id}").text
+    assert f'Stacked on <a href="/change-sets/{first.id}">' in page
+    assert "merge only this one" in page
 
 
 def test_pages_render(client: TestClient, cs_id: int, conn: Connection) -> None:

@@ -10,6 +10,8 @@
   {{ cs.edited_count }} edited · {{ cs.rejected_count }} rejected (of {{ cs.proposed_count }}).</p>{% endif %}
 {% if cs.branch %}<p>Committed to branch <code>{{ cs.branch }}</code> as <code>{{ cs.commit_sha[:10] }}</code>
   (based on <code>{{ cs.base_sha[:10] }}</code>). Your working tree was not touched; merge the branch when you're ready.
+  {% if stacked_on %}<br>Stacked on <a href="/change-sets/{{ stacked_on.id }}">change set #{{ stacked_on.id }}</a>
+  (<code>{{ stacked_on.branch }}</code>): this branch already contains it, so merge only this one.{% endif %}
   {% if cs.rollback_sha %}<br>Rolled back in <code>{{ cs.rollback_sha[:10] }}</code>.{% endif %}</p>{% endif %}
 
 {% if cs.status == 'proposed' %}

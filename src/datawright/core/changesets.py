@@ -237,24 +237,82 @@ class ChangeSetService:
         branch = branch_name(cs)
         if gitops.branch_sha(repo, branch):
             raise ConflictError(f"branch {branch} already exists")
+        parent, below = head, self._stack_base(cs, repo, head)
+        if below is not None:
+            parent = gitops.branch_sha(repo, below.branch or "") or head
+            self._restack(cs, repo, parent, below)
         message = (
             f"Datawright change set #{cs.id}: {cs.title}\n\n"
             f"Approved by {cs.reviewed_by}. Agent run #{cs.run_id}."
         )
+        if below is not None:
+            message += (
+                f"\nStacked on change set #{below.id} ({below.branch}): "
+                "merging this branch brings in both."
+            )
         commit = gitops.commit_files(
-            repo, head, {i.file_path: i.after.encode("utf-8") for i in cs.items}, message
+            repo, parent, {i.file_path: i.after.encode("utf-8") for i in cs.items}, message
         )
         gitops.update_branch(repo, branch, commit, None)
-        cs.base_sha, cs.branch, cs.commit_sha, cs.error = head, branch, commit, None
+        cs.base_sha, cs.branch, cs.commit_sha, cs.error = parent, branch, commit, None
         self._set_findings(cs, "fixed")
-        self._move(cs, "applied", branch=branch, commit=commit)
+        stacked = {"stacked_on": below.id} if below is not None else {}
+        self._move(cs, "applied", branch=branch, commit=commit, **stacked)
         return commit
+
+    def _stack_base(self, cs: ChangeSet, repo: Path, head: str) -> ChangeSet | None:
+        """The newest applied set on this connection whose branch is unmerged work on HEAD."""
+        query = (
+            select(ChangeSet)
+            .where(
+                ChangeSet.connection_id == cs.connection_id,
+                ChangeSet.status == "applied",
+                ChangeSet.id != cs.id,
+            )
+            .order_by(ChangeSet.id.desc())
+        )
+        for other in self.session.scalars(query):
+            tip = gitops.branch_sha(repo, other.branch or "")
+            if tip and tip != head and gitops.is_ancestor(repo, head, tip):
+                return other
+        return None
+
+    def _restack(self, cs: ChangeSet, repo: Path, tip: str, below: ChangeSet) -> None:
+        """Replay the approved intents onto the files at `tip` and re-run the propose check."""
+        for item in cs.items:
+            if gitops.blob_sha(repo, tip, item.file_path) is None:
+                raise ConflictError(f"{item.file_path} is missing on {below.branch}")
+            base = gitops.show(repo, tip, item.file_path).decode("utf-8")
+            if base == item.before:
+                continue
+            try:
+                after = replay(base, item.intents)
+            except ValueError as e:
+                raise ConflictError(f"{item.file_path}: can't stack on #{below.id}: {e}") from e
+            problems = check_item(base, after, item.intents)
+            if problems:
+                raise ConflictError(
+                    f"{item.file_path}: can't stack on #{below.id}: {'; '.join(problems)}"
+                )
+            item.before, item.after = base, after
+            item.diff = unified_diff(item.file_path, base, after)
 
     def rollback(self, cs: ChangeSet) -> str:
         self._require(cs, "applied")
         self._require_approver()
         repo = Path(cs.connection.path)
         assert cs.branch
+        above = self.session.scalar(
+            select(ChangeSet).where(
+                ChangeSet.connection_id == cs.connection_id,
+                ChangeSet.status == "applied",
+                ChangeSet.base_sha == cs.commit_sha,
+            )
+        )
+        if above is not None:
+            raise ConflictError(
+                f"change set #{above.id} is stacked on this one; roll back #{above.id} first"
+            )
         tip = gitops.branch_sha(repo, cs.branch)
         if tip is None:
             raise ConflictError(f"branch {cs.branch} no longer exists")

@@ -88,6 +88,16 @@ def blob_sha(repo: Path, rev: str, path: str) -> str | None:
     return sha or None
 
 
+def is_ancestor(repo: Path, ancestor: str, rev: str) -> bool:
+    """True when `ancestor` is reachable from `rev` (a commit counts as its own ancestor)."""
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", ancestor, rev], capture_output=True
+    )
+    if proc.returncode not in (0, 1):
+        raise GitError(f"git merge-base failed: {proc.stderr.decode(errors='replace').strip()}")
+    return proc.returncode == 0
+
+
 def show(repo: Path, rev: str, path: str) -> bytes:
     return git(repo, "show", f"{rev}:{path}")
 

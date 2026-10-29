@@ -102,6 +102,81 @@ def test_uncommitted_edits_are_a_conflict(
         svc.apply(cs)
 
 
+def margin_sets(session: Session, user: User, conn: Connection) -> tuple[ChangeSet, ChangeSet]:
+    """The Phase 1 Desktop check: `fix` rewrote 'Margin %' and `document` described it, both
+    proposed from the same HEAD. As sibling branches they conflicted when merged."""
+    svc = ChangeSetService(session, user)
+    fix = svc.create_draft(conn, "Use DIVIDE")
+    svc.add_edit(fix, SALES, {
+        "op": "tmdl.set_expression", "kind": "measure", "table": "Sales", "name": "Margin %",
+        "value": "DIVIDE([Profit], [Total Sales])", "object_path": "Retail/Sales/measure/Margin %",
+    })  # fmt: skip
+    doc = svc.create_draft(conn, "Describe Margin %")
+    svc.add_edit(doc, SALES, intent("Margin %", "Profit as a share of total sales."))
+    for cs in (fix, doc):
+        assert svc.propose(cs) == []
+        svc.approve(cs)
+    return fix, doc
+
+
+def test_second_change_set_stacks_on_the_first(
+    session: Session, user: User, conn: Connection, repo: Path
+) -> None:
+    head = gitops.head_sha(repo)
+    fix, doc = margin_sets(session, user, conn)
+    svc = ChangeSetService(session, user)
+    first = svc.apply(fix)
+    second = svc.apply(doc)
+
+    assert gitops.out(repo, "rev-parse", f"{first}^") == head
+    assert gitops.out(repo, "rev-parse", f"{second}^") == first
+    assert f"#{fix.id}" in gitops.out(repo, "log", "-1", "--format=%B", second)
+    text = gitops.show(repo, second, SALES).decode()
+    assert (
+        "\t/// Profit as a share of total sales.\n"
+        "\tmeasure 'Margin %' = DIVIDE([Profit], [Total Sales])\n"
+    ) in text
+    item = doc.items[0]
+    assert item.before == gitops.show(repo, first, SALES).decode() and item.after == text
+    changed = [ln for ln in item.diff.splitlines()[2:] if ln[:1] in "+-"]
+    assert changed == ["+\t/// Profit as a share of total sales."]  # the review shows doc only
+    assert gitops.head_sha(repo) == head and gitops.out(repo, "status", "--porcelain") == ""
+    # Merging the newest branch alone brings in both sets.
+    gitops.git(repo, "merge", "--ff-only", "-q", doc.branch or "", as_datawright=False)
+    assert (repo / SALES).read_bytes().decode() == text
+
+
+def test_merged_change_sets_are_not_stacked_on(
+    session: Session, user: User, conn: Connection, repo: Path
+) -> None:
+    svc = ChangeSetService(session, user)
+    cs = proposed(session, user, conn)
+    svc.approve(cs)
+    svc.apply(cs)
+    gitops.git(repo, "merge", "--ff-only", "-q", cs.branch or "", as_datawright=False)
+    later = svc.create_draft(conn, "Describe Units")
+    svc.add_edit(later, SALES, intent("Units ", "Number of units sold."))
+    assert svc.propose(later) == []
+    svc.approve(later)
+    commit = svc.apply(later)
+    assert gitops.out(repo, "rev-parse", f"{commit}^") == gitops.head_sha(repo)
+
+
+def test_rollback_waits_for_sets_stacked_on_top(
+    session: Session, user: User, conn: Connection, repo: Path
+) -> None:
+    fix, doc = margin_sets(session, user, conn)
+    svc = ChangeSetService(session, user)
+    svc.apply(fix)
+    svc.apply(doc)
+    with pytest.raises(ConflictError, match=f"#{doc.id}"):
+        svc.rollback(fix)
+    svc.rollback(doc)
+    assert "DIVIDE" in gitops.show(repo, doc.branch or "", SALES).decode()  # only doc undone
+    svc.rollback(fix)
+    assert fix.status == "rolled_back"
+
+
 def test_review_rules(session: Session, user: User, conn: Connection) -> None:
     cs = proposed(session, user, conn)
     svc = ChangeSetService(session, user)
